@@ -40,14 +40,34 @@ class NessusService {
     }
   }
 
-  async downloadReport(serverId) {
+  async downloadReport(serverName) {
     try {
-      const response = await axios.get(`${API_URL}/scan/report/${serverId}`, {
-        responseType: 'blob'
+      console.log(`Downloading report for server: ${serverName}`);
+      const response = await axios.get(`${API_URL}/scan/report/${serverName}`, {
+        responseType: 'blob',
+        withCredentials: true
       });
+      
+      // Check if the response is valid
+      if (!response.data) {
+        throw new Error('Empty response received');
+      }
+
+      // Return the blob data for the component to handle
       return response.data;
     } catch (error) {
-      throw new Error(error.response?.data?.error || 'Failed to download report');
+      console.error('Error in downloadReport:', error);
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        throw new Error(error.response.data?.error || 'Server error during report download');
+      } else if (error.request) {
+        // The request was made but no response was received
+        throw new Error('No response received from server');
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        throw new Error(error.message || 'Failed to download report');
+      }
     }
   }
 

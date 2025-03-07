@@ -18,6 +18,7 @@ const Dashboard = () => {
   const [scanStates, setScanStates] = useState({});
   const [activePollingJobs, setActivePollingJobs] = useState(new Set());
   const [statusCheckIntervals, setStatusCheckIntervals] = useState({});
+  const [downloadLoading, setDownloadLoading] = useState({});
 
     // Fetch initial scan states when component mounts
     useEffect(() => {
@@ -72,7 +73,7 @@ const Dashboard = () => {
 
   // Helper function to format Unix timestamp
   const formatDate = (timestamp) => {
-    if (!timestamp) return 'Null';
+    if (!timestamp) return 'Never';
     try {
       // Check if timestamp is in seconds (Nessus API) or milliseconds
       const timestampMs = timestamp.toString().length === 10 ? timestamp * 1000 : timestamp;
@@ -177,7 +178,40 @@ const Dashboard = () => {
     }
   };
 
-
+  const handleDownloadReport = async (server) => {
+    try {
+      setDownloadLoading(prev => ({ ...prev, [server.name]: true }));
+      
+      // Check if there's a completed scan for this server
+      const scanState = scanStates[server.name];
+      if (!scanState || scanState.status !== 'completed') {
+        message.warning('No completed scan available for download');
+        return;
+      }
+      
+      // Download the report
+      const blob = await nessusService.downloadReport(server.name);
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `nessus_report_${server.name}_${new Date().toISOString().split('T')[0]}.pdf`);
+      document.body.appendChild(link);
+      
+      // Trigger download and cleanup
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      
+      message.success(`Report for ${server.name} downloaded successfully`);
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      message.error(`Failed to download report: ${error.message}`);
+    } finally {
+      setDownloadLoading(prev => ({ ...prev, [server.name]: false }));
+    }
+  };
 
   const handleScanClick = async (server) => {
     try {
@@ -393,12 +427,15 @@ const Dashboard = () => {
       key: 'actions',
       render: (_, record) => (
         <Space size="middle">
-          <Button 
-            type="text"
-            icon={<DownloadOutlined />}
-            onClick={() => console.log(`Downloading report for: ${record.name}`)}
-            title="Download Report"
-          />
+          <Tooltip title="Download Report">
+            <Button 
+              type="text"
+              icon={<DownloadOutlined />}
+              onClick={() => handleDownloadReport(record)}
+              loading={downloadLoading[record.name]}
+              disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
+            />
+          </Tooltip>
           {getScanActionButton(record)}
           <Button
             type="text"
