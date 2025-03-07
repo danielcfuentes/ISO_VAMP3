@@ -1,0 +1,138 @@
+.dashboard {
+    min-height: 100vh;
+    background-color: #f5f5f5;
+    padding: 20px;
+  }
+  
+  .dashboard-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  h1 {
+    margin-bottom: 24px;
+    color: #333;
+  }
+  
+  .add-server-form {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  
+  .add-server-form input {
+    flex: 1;
+    padding: 8px 16px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+  
+  .add-server-form input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  }
+  
+  .add-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .add-button:hover {
+    background-color: #1d4ed8;
+  }
+  
+  .error-alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background-color: #fee2e2;
+    border: 1px solid #fecaca;
+    border-radius: 4px;
+    color: #dc2626;
+    margin-bottom: 16px;
+  }
+  
+  .table-container {
+    overflow-x: auto;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  th {
+    text-align: left;
+    padding: 12px;
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #ddd;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #666;
+  }
+  
+  td {
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+    color: #333;
+  }
+  
+  .status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  
+  .status-badge.online {
+    background-color: #dcfce7;
+    color: #166534;
+  }
+  
+  .status-badge.offline,
+  .status-badge.pending {
+    background-color: #fee2e2;
+    color: #dc2626;
+  }
+  
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .action-button {
+    padding: 4px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: #666;
+  }
+  
+  .action-button:hover {
+    color: #333;
+  }
+  
+  .action-button:disabled {
+    color: #ccc;
+    cursor: not-allowed;
+  }
+  
+  .icon {
+    width: 16px;
+    height: 16px;
+  }
