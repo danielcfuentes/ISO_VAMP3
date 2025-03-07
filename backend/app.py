@@ -1,10 +1,15 @@
-from flask import Flask, jsonify, request, session
+# =============================================================================
+# IMPORTS AND SETUP
+# =============================================================================
+
+from flask import Flask, jsonify, request, session, Response
 from flask_cors import CORS
 import requests
 import urllib3
 import logging
 import time
 import json
+import io
 from functools import wraps
 
 # Disable SSL warnings
@@ -26,12 +31,29 @@ CORS(app,
          }
      })
 
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
 # Nessus API Configuration
 NESSUS_URL = 'https://isosrvutn00.utep.edu:8834'
 TEMPLATE_UUID = 'e785b26c-5b4d-5da8-6643-007ea1f8ee1c8f23937a4bd45a1d'
 POLICY_ID = '26729'
+EXTERNAL_TEMPLATE_UUID = 'ad629e16-03b6-8c1d-cef6-ef8c9dd3c658d24bd260ef5f9e66'
+EXTERNAL_POLICY_ID = '67766'
+REPORT_TEMPLATE_ID = '2493'
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
 
 def login_required(f):
+    """
+    Decorator to ensure user is authenticated before accessing endpoint
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'token' not in session:
@@ -40,13 +62,23 @@ def login_required(f):
     return decorated_function
 
 def get_headers():
+    """
+    Returns standard headers with authentication token for Nessus API requests
+    """
     return {
         'X-Cookie': f'token={session["token"]}',
         'Content-Type': 'application/json'
     }
 
+# =============================================================================
+# AUTHENTICATION ROUTES
+# =============================================================================
+
 @app.route('/api/auth/login', methods=['POST'])
 def login():
+    """
+    Authenticate with Nessus Manager and establish session
+    """
     try:
         data = request.json
         username = data.get('username')
@@ -70,9 +102,16 @@ def login():
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 401
 
+# =============================================================================
+# AGENT AND GROUP MANAGEMENT ROUTES
+# =============================================================================
+
 @app.route('/api/agent-groups', methods=['GET'])
 @login_required
 def get_agent_groups():
+    """
+    Retrieve agent groups filtered by current user
+    """
     try:
         response = requests.get(
             f'{NESSUS_URL}/agent-groups',
@@ -179,25 +218,42 @@ def remove_agent(group_id, agent_id):
         )
         
         # Log the response for debugging
-        print(f"Nessus Response Status: {response.status_code}")
-        print(f"Nessus Response: {response.text}")
+        logging.debug(f"Nessus Response Status: {response.status_code}")
+        logging.debug(f"Nessus Response: {response.text}")
         
         response.raise_for_status()
         return jsonify({'message': 'Agent removed successfully'})
     except requests.exceptions.RequestException as e:
-        print(f"Error removing agent: {str(e)}")
+        logging.error(f"Error removing agent: {str(e)}")
         return jsonify({'error': str(e)}), 500
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")
+        logging.error(f"Unexpected error: {str(e)}")
         return jsonify({'error': str(e)}), 500
-    
 
+@app.route('/api/agents/<int:agent_id>', methods=['GET'])
+@login_required
+def get_agent_details(agent_id):
+    try:
+        response = requests.get(
+            f'{NESSUS_URL}/agents/{agent_id}',
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-# LAUNCH AND START SCAN
+# =============================================================================
+# SCAN MANAGEMENT ROUTES
+# =============================================================================
 
 @app.route('/api/folders/my-scans', methods=['GET'])
 @login_required
 def get_my_scans_folder():
+    """
+    Retrieve 'My Scans' folder ID
+    """
     try:
         response = requests.get(
             f'{NESSUS_URL}/folders',
@@ -214,7 +270,6 @@ def get_my_scans_folder():
         return jsonify({'error': 'My Scans folder not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/scans/check-existing', methods=['GET'])
 @login_required
@@ -251,7 +306,7 @@ def check_existing_scan():
             'scan': existing_scan
         })
     except Exception as e:
-        app.logger.error(f"Error checking existing scan: {str(e)}")
+        logging.error(f"Error checking existing scan: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/agent-groups/create', methods=['POST'])
@@ -356,7 +411,6 @@ def create_scan():
         logging.error(error_msg)
         return jsonify({'error': error_msg}), 500
 
-
 @app.route('/api/scans/<int:scan_id>/launch', methods=['POST'])
 @login_required
 def launch_scan(scan_id):
@@ -369,15 +423,19 @@ def launch_scan(scan_id):
         response.raise_for_status()
         return jsonify({'message': 'Scan launched successfully'})
     except Exception as e:
-        app.logger.error(f"Error launching scan: {str(e)}")
+        logging.error(f"Error launching scan: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
-# SCAN STATUS
+# =============================================================================
+# SCAN STATUS ROUTES
+# =============================================================================
 
 @app.route('/api/scans/status/<int:scan_id>', methods=['GET'])
 @login_required
 def get_scan_status(scan_id):
+    """
+    Get the current status of a scan, including progress information
+    """
     try:
         response = requests.get(
             f'{NESSUS_URL}/scans/{scan_id}',
@@ -432,6 +490,308 @@ def find_scan(server_name):
         return jsonify({'error': 'Scan not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# REPORT GENERATION ROUTES
+# =============================================================================
+
+@app.route('/api/scan/report/<server_name>', methods=['GET'])
+@login_required
+def download_report(server_name):
+    """
+    Generate and download a PDF report for a completed scan
+    """
+    try:
+        # Find scan for the server
+        scans_response = requests.get(
+            f'{NESSUS_URL}/scans',
+            headers=get_headers(),
+            verify=False
+        )
+        scans_response.raise_for_status()
+        scans = scans_response.json().get('scans', [])
+        
+        scan = None
+        for s in scans:
+            if server_name.lower() in s['name'].lower():
+                scan = s
+                break
+        
+        if not scan:
+            return jsonify({'error': 'Scan not found'}), 404
+        
+        scan_id = scan['id']
+        
+        # Prepare export request
+        export_data = {
+            'format': 'pdf',
+            'template_id': REPORT_TEMPLATE_ID,
+            'chapters': 'vuln_hosts_summary'
+        }
+        
+        # Initiate report download
+        export_response = requests.post(
+            f'{NESSUS_URL}/scans/{scan_id}/export',
+            headers=get_headers(),
+            json=export_data,
+            verify=False
+        )
+        export_response.raise_for_status()
+        file_id = export_response.json()['file']
+        
+        # Check status until ready
+        while True:
+            status_response = requests.get(
+                f'{NESSUS_URL}/scans/{scan_id}/export/{file_id}/status',
+                headers=get_headers(),
+                verify=False
+            )
+            status_response.raise_for_status()
+            status = status_response.json()
+            
+            if status.get('status') == 'ready':
+                break
+            elif status.get('status') == 'error':
+                return jsonify({'error': 'Error generating report'}), 500
+                
+            time.sleep(1)
+        
+        # Download the report
+        download_response = requests.get(
+            f'{NESSUS_URL}/scans/{scan_id}/export/{file_id}/download',
+            headers=get_headers(),
+            verify=False
+        )
+        download_response.raise_for_status()
+        
+        # Return the file as a download
+        filename = f"nessus_report_{server_name}_{time.strftime('%Y%m%d_%H%M%S')}.pdf"
+        return Response(
+            io.BytesIO(download_response.content),
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}'
+            }
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# EXTERNAL SCANNING ROUTES
+# =============================================================================
+
+@app.route('/api/external-scans/folder', methods=['GET'])
+@login_required
+def get_external_scans_folder():
+    """
+    Retrieve or create the 'ExternalScans' folder
+    """
+    try:
+        # Get folders
+        response = requests.get(
+            f'{NESSUS_URL}/folders',
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        folders = response.json().get('folders', [])
+        
+        # Look for ExternalScans folder
+        for folder in folders:
+            if folder['name'] == 'ExternalScans':
+                return jsonify(folder)
+        
+        # Create folder if it doesn't exist
+        create_folder_data = {'name': 'ExternalScans'}
+        create_response = requests.post(
+            f'{NESSUS_URL}/folders',
+            headers=get_headers(),
+            json=create_folder_data,
+            verify=False
+        )
+        create_response.raise_for_status()
+        return jsonify(create_response.json())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/external-scans/create', methods=['POST'])
+@login_required
+def create_external_scan():
+    try:
+        data = request.json
+        server_name = data.get('server_name')
+        folder_id = data.get('folder_id')
+        
+        if not server_name or not folder_id:
+            return jsonify({'error': 'Missing required parameters'}), 400
+        
+        # Create external scan
+        scan_data = {
+            "uuid": EXTERNAL_TEMPLATE_UUID,
+            "settings": {
+                "name": server_name,
+                "description": f"{session.get('username', 'user')} created vulnerability scan for {server_name}",
+                "enabled": True,
+                "launch": "ON_DEMAND",
+                "folder_id": int(folder_id),
+                "policy_id": EXTERNAL_POLICY_ID,
+                "scanner_id": 1,
+                "text_targets": server_name,
+                "type": "vulnerability"
+            }
+        }
+        
+        response = requests.post(
+            f'{NESSUS_URL}/scans',
+            headers=get_headers(),
+            json=scan_data,
+            verify=False
+        )
+        response.raise_for_status()
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/external-scans/check-existing', methods=['GET'])
+@login_required
+def check_existing_external_scan():
+    try:
+        server_name = request.args.get('server_name')
+        folder_id = request.args.get('folder_id')
+        
+        if not server_name or not folder_id:
+            return jsonify({'error': 'Missing required parameters'}), 400
+
+        # Get scans from folder
+        response = requests.get(
+            f'{NESSUS_URL}/scans',
+            params={'folder_id': folder_id},
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        
+        scans = response.json().get('scans', [])
+        if scans is None:
+            scans = []
+            
+        # Look for matching scan
+        existing_scan = None
+        for scan in scans:
+            if scan['name'].lower() == server_name.lower():
+                existing_scan = scan
+                break
+                
+        return jsonify({
+            'exists': existing_scan is not None,
+            'scan': existing_scan
+        })
+    except Exception as e:
+        logging.error(f"Error checking existing external scan: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/external-scans', methods=['GET'])
+@login_required
+def list_external_scans():
+    try:
+        # First get the ExternalScans folder
+        folders_response = requests.get(
+            f'{NESSUS_URL}/folders',
+            headers=get_headers(),
+            verify=False
+        )
+        folders_response.raise_for_status()
+        folders = folders_response.json().get('folders', [])
+        
+        folder_id = None
+        for folder in folders:
+            if folder['name'] == 'ExternalScans':
+                folder_id = folder['id']
+                break
+        
+        if not folder_id:
+            return jsonify({'scans': []})
+        
+        # Get all scans in the folder
+        response = requests.get(
+            f'{NESSUS_URL}/scans',
+            params={'folder_id': folder_id},
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        scans = response.json().get('scans', [])
+        
+        scan_details = []
+        for scan in scans:
+            scan_id = scan.get('id')
+            detail_response = requests.get(
+                f'{NESSUS_URL}/scans/{scan_id}',
+                headers=get_headers(),
+                verify=False
+            )
+            if detail_response.status_code == 200:
+                detail = detail_response.json()
+                host_info = []
+                if 'hosts' in detail:
+                    for host in detail.get('hosts', []):
+                        host_info.append({
+                            'hostname': host.get('hostname', 'N/A'),
+                            'ip': host.get('host-ip', host.get('hostname', 'N/A')),
+                            'critical': host.get('critical', 0),
+                            'high': host.get('high', 0),
+                            'medium': host.get('medium', 0),
+                            'low': host.get('low', 0),
+                            'info': host.get('info', 0)
+                        })
+                
+                scan_details.append({
+                    'id': scan_id,
+                    'name': scan.get('name', 'Unknown'),
+                    'status': detail.get('info', {}).get('status', 'unknown'),
+                    'start_time': detail.get('info', {}).get('scan_start', None),
+                    'end_time': detail.get('info', {}).get('scan_end', None),
+                    'hosts': host_info
+                })
+        
+        return jsonify({'scans': scan_details})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/external-scans/stop/<int:scan_id>', methods=['POST'])
+@login_required
+def stop_external_scan(scan_id):
+    try:
+        response = requests.post(
+            f'{NESSUS_URL}/scans/{scan_id}/stop',
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        return jsonify({'message': 'Scan stopped successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/scan/stop/<int:scan_id>', methods=['POST'])
+@login_required
+def stop_scan(scan_id):
+    """
+    Stop a running scan
+    """
+    try:
+        response = requests.post(
+            f'{NESSUS_URL}/scans/{scan_id}/stop',
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        return jsonify({'message': 'Scan stopped successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# MAIN APPLICATION ENTRY POINT
+# =============================================================================
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
