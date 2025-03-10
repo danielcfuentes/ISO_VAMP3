@@ -5,6 +5,7 @@ import MainLayout from './components/MainLayout';
 import Dashboard from './components/Dashboard';
 import ExternalScans from './components/ExternalScans';
 import ExceptionRequests from './components/ExceptionRequests';
+import AdminDashboard from './components/AdminDashboard';
 import Login from './components/Login';
 
 const ProtectedRoute = ({ children, isAuthenticated }) => {
@@ -48,6 +49,12 @@ function App() {
           <Route path="/exception-requests" element={
             <ProtectedRoute isAuthenticated={isAuthenticated}>
               <ExceptionRequests />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/admin-dashboard" element={
+            <ProtectedRoute isAuthenticated={isAuthenticated}>
+              <AdminDashboard />
             </ProtectedRoute>
           } />
           

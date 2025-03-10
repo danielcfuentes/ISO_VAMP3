@@ -1,7 +1,7 @@
 import React from 'react';
 import { Layout, Menu } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { DesktopOutlined, ScanOutlined, FileTextOutlined } from '@ant-design/icons';
+import { DesktopOutlined, ScanOutlined, FileTextOutlined, DashboardOutlined } from '@ant-design/icons';
 
 const { Header, Content, Sider } = Layout;
 
@@ -24,6 +24,11 @@ const MainLayout = ({ children }) => {
       key: '/exception-requests',
       icon: <FileTextOutlined />,
       label: 'Exception Requests',
+    },
+    {
+      key: '/admin-dashboard',
+      icon: <DashboardOutlined />,
+      label: 'Admin Dashboard',
     },
   ];
 
