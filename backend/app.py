@@ -73,7 +73,6 @@ def get_headers():
 # =============================================================================
 # AUTHENTICATION ROUTES
 # =============================================================================
-
 @app.route('/api/auth/login', methods=['POST'])
 def login():
     """
@@ -98,7 +97,27 @@ def login():
         session['token'] = token
         session['username'] = username
         
-        return jsonify({'message': 'Login successful'})
+        # Check if user is admin (belongs to group with ID 4)
+        is_admin = False
+        try:
+            # Get agent groups
+            groups_response = requests.get(
+                f'{NESSUS_URL}/agent-groups',
+                headers=get_headers(),
+                verify=False
+            )
+            groups_response.raise_for_status()
+            
+            groups = groups_response.json().get('groups', [])
+            # Check if user belongs to group with ID 4
+            is_admin = any(group.get('id') == 4 for group in groups)
+            
+            session['is_admin'] = is_admin
+        except Exception as e:
+            # Fail silently if we can't determine admin status
+            logging.error(f"Error checking admin status: {str(e)}")
+        
+        return jsonify({'message': 'Login successful', 'is_admin': is_admin})
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 401
 
