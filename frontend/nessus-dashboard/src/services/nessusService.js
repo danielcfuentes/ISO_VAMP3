@@ -16,9 +16,31 @@ class NessusService {
         username,
         password
       });
-      return response.data;
+      
+      // Store admin status in localStorage for persistence
+      localStorage.setItem('isAdmin', response.data.is_admin ? 'true' : 'false');
+      
+      return {
+        message: response.data.message,
+        isAdmin: response.data.is_admin || false
+      };
     } catch (error) {
       throw new Error(error.response?.data?.error || 'Failed to login');
+    }
+  }
+
+  async logout() {
+    try {
+      await axios.post(`${API_URL}/auth/logout`);
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('isAdmin');
+      return { message: 'Logged out successfully' };
+    } catch (error) {
+      console.error('Error logging out:', error);
+      // Still remove local storage items even if the server call fails
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('isAdmin');
+      throw new Error('Failed to logout');
     }
   }
 
