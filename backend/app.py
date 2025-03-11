@@ -92,32 +92,42 @@ def login():
         )
         auth_response.raise_for_status()
         
-        # Store token in session
+        # Store token in session (Keep this as it was before)
         token = auth_response.json()['token']
         session['token'] = token
         session['username'] = username
         
         # Check if user is admin (belongs to group with ID 4)
         is_admin = False
+        
+        # Get user session info which contains group membership
         try:
-            # Get agent groups
-            groups_response = requests.get(
-                f'{NESSUS_URL}/agent-groups',
-                headers=get_headers(),
+            user_info_response = requests.get(
+                f'{NESSUS_URL}/session',
+                headers={'X-Cookie': f'token={token}', 'Content-Type': 'application/json'},
                 verify=False
             )
-            groups_response.raise_for_status()
             
-            groups = groups_response.json().get('groups', [])
-            # Check if user belongs to group with ID 4
-            is_admin = any(group.get('id') == 4 for group in groups)
+            if user_info_response.status_code == 200:
+                user_info = user_info_response.json()
+                
+                # Check if user is in the DashboardAdmins group (ID 4)
+                if 'groups' in user_info:
+                    # Only store the minimal information needed
+                    is_admin = any(group.get('id') == 4 for group in user_info.get('groups', []))
+                    logging.info(f"User '{username}' is admin: {is_admin}")
             
+            # Store only the admin status, not the entire group data
             session['is_admin'] = is_admin
+            
         except Exception as e:
-            # Fail silently if we can't determine admin status
             logging.error(f"Error checking admin status: {str(e)}")
+            # If there's an error, don't disrupt the login flow
         
-        return jsonify({'message': 'Login successful', 'is_admin': is_admin})
+        return jsonify({
+            'message': 'Login successful', 
+            'is_admin': is_admin
+        })
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 401
 
@@ -244,17 +254,11 @@ def remove_agent(group_id, agent_id):
             verify=False
         )
         
-        # Log the response for debugging
-        logging.debug(f"Nessus Response Status: {response.status_code}")
-        logging.debug(f"Nessus Response: {response.text}")
-        
         response.raise_for_status()
         return jsonify({'message': 'Agent removed successfully'})
     except requests.exceptions.RequestException as e:
-        logging.error(f"Error removing agent: {str(e)}")
         return jsonify({'error': str(e)}), 500
     except Exception as e:
-        logging.error(f"Unexpected error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/agents/<int:agent_id>', methods=['GET'])
@@ -333,7 +337,6 @@ def check_existing_scan():
             'scan': existing_scan
         })
     except Exception as e:
-        logging.error(f"Error checking existing scan: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/agent-groups/create', methods=['POST'])
@@ -381,7 +384,6 @@ def create_agent_group():
 def create_scan():
     try:
         data = request.json
-        logging.debug(f"Creating scan with data: {data}")
         
         # Ensure proper formatting of URL
         scan_url = f'{NESSUS_URL.rstrip("/")}/scans'
@@ -410,19 +412,12 @@ def create_scan():
             }
         }
         
-        logging.debug(f"Making request to {scan_url} with headers: {headers}")
-        logging.debug(f"Request payload: {json.dumps(scan_data, indent=2)}")
-        
         response = requests.post(
             scan_url,
             headers=headers,
             json=scan_data,
             verify=False
         )
-        
-        # Log the response for debugging
-        logging.debug(f"Response status code: {response.status_code}")
-        logging.debug(f"Response content: {response.text}")
         
         response.raise_for_status()
         return jsonify(response.json())
@@ -431,11 +426,9 @@ def create_scan():
         error_msg = f"Error creating scan: {str(e)}"
         if hasattr(e, 'response'):
             error_msg += f"\nResponse: {e.response.text}"
-        logging.error(error_msg)
         return jsonify({'error': error_msg}), 500
     except Exception as e:
         error_msg = f"Unexpected error creating scan: {str(e)}"
-        logging.error(error_msg)
         return jsonify({'error': error_msg}), 500
 
 @app.route('/api/scans/<int:scan_id>/launch', methods=['POST'])
@@ -450,7 +443,6 @@ def launch_scan(scan_id):
         response.raise_for_status()
         return jsonify({'message': 'Scan launched successfully'})
     except Exception as e:
-        logging.error(f"Error launching scan: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # =============================================================================
@@ -489,10 +481,8 @@ def get_scan_status(scan_id):
             'raw_status': info  # Include raw status for debugging
         }
         
-        logging.debug(f"Scan {scan_id} status: {status_info}")
         return jsonify(status_info)
     except Exception as e:
-        logging.error(f"Error getting scan status: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/scans/find/<server_name>', methods=['GET'])
@@ -714,7 +704,6 @@ def check_existing_external_scan():
             'scan': existing_scan
         })
     except Exception as e:
-        logging.error(f"Error checking existing external scan: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/external-scans', methods=['GET'])
