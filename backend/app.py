@@ -121,6 +121,14 @@ def login():
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 401
 
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    """
+    Clear user session
+    """
+    session.clear()
+    return jsonify({'message': 'Logged out successfully'})
 # =============================================================================
 # AGENT AND GROUP MANAGEMENT ROUTES
 # =============================================================================
