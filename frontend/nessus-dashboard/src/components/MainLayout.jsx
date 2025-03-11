@@ -1,14 +1,15 @@
 import React from 'react';
-import { Layout, Menu } from 'antd';
+import { Layout, Menu, Button } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { DesktopOutlined, ScanOutlined, FileTextOutlined, DashboardOutlined } from '@ant-design/icons';
+import { DesktopOutlined, ScanOutlined, FileTextOutlined, DashboardOutlined, LogoutOutlined } from '@ant-design/icons';
 
-const { Header, Content, Sider } = Layout;
+const { Content, Sider } = Layout;
 
-const MainLayout = ({ children }) => {
+const MainLayout = ({ children, isAdmin, onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Only include admin dashboard menu item if user is admin
   const menuItems = [
     {
       key: '/my-agents',
@@ -25,11 +26,13 @@ const MainLayout = ({ children }) => {
       icon: <FileTextOutlined />,
       label: 'Exception Requests',
     },
-    {
-      key: '/admin-dashboard',
-      icon: <DashboardOutlined />,
-      label: 'Admin Dashboard',
-    },
+    ...(isAdmin ? [
+      {
+        key: '/admin-dashboard',
+        icon: <DashboardOutlined />,
+        label: 'Admin Dashboard',
+      }
+    ] : [])
   ];
 
   return (
@@ -49,6 +52,11 @@ const MainLayout = ({ children }) => {
           onClick={({ key }) => navigate(key)}
           className="border-r-0"
         />
+        <div className="p-4 mt-auto">
+          <Button type="link" block onClick={onLogout}>
+            <LogoutOutlined /> Logout
+          </Button>
+        </div>
       </Sider>
       <Layout>
         <Content className="bg-gray-50">
