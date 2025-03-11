@@ -20,20 +20,20 @@ const Login = ({ onLoginSuccess }) => {
   const handleSubmit = async (values) => {
     try {
       setLoading(true);
-      await nessusService.login(values.username, values.password);
+      const result = await nessusService.login(values.username, values.password);
       message.success({
         content: 'Login successful',
         icon: <CheckCircleFilled style={{ color: '#52c41a' }} />,
         className: 'custom-success-message'
       });
-      setTimeout(() => onLoginSuccess(), 800);
+      setTimeout(() => onLoginSuccess(result.isAdmin), 800);
     } catch (error) {
       message.error(error.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
-
+  
   return (
     <div className="login-container">
       <div className="background-pattern" />
