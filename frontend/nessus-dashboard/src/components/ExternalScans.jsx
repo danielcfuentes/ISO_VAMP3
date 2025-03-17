@@ -12,7 +12,8 @@ import {
   Alert, 
   message,
   Divider,
-  Tooltip
+  Tooltip,
+  Spin
 } from 'antd';
 import { 
   ScanOutlined, 
@@ -27,6 +28,7 @@ import {
   MailOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
+import nessusService from '../services/nessusService';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -41,6 +43,7 @@ const ExternalScans = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [externalScansFolder, setExternalScansFolder] = useState(null);
   const [approvalModalVisible, setApprovalModalVisible] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState({});
   
   // API URL
   const API_URL = 'http://localhost:5000/api';
@@ -154,14 +157,15 @@ const ExternalScans = () => {
   };
 
   const handleDownloadReport = async (scanId, scanName) => {
+    // Set loading state for this specific download
+    setDownloadLoading(prev => ({ ...prev, [scanName]: true }));
+    
     try {
-      const response = await axios.get(`${API_URL}/scan/report/${scanName}`, {
-        responseType: 'blob',
-        withCredentials: true
-      });
+      // Use the new dedicated method for external scan reports
+      const blob = await nessusService.downloadExternalScanReport(scanName);
       
       // Create blob link to download
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `external_scan_${scanName}.pdf`);
@@ -171,9 +175,14 @@ const ExternalScans = () => {
       // Clean up
       link.parentNode.removeChild(link);
       window.URL.revokeObjectURL(url);
+      
+      message.success(`Report for ${scanName} downloaded successfully`);
     } catch (error) {
       console.error('Error downloading report:', error);
-      message.error('Failed to download report');
+      message.error(`Failed to download report: ${error.message}`);
+    } finally {
+      // Clear loading state
+      setDownloadLoading(prev => ({ ...prev, [scanName]: false }));
     }
   };
 
@@ -249,8 +258,9 @@ const ExternalScans = () => {
             <Tooltip title="Download Report">
               <Button 
                 type="text"
-                icon={<DownloadOutlined />}
+                icon={downloadLoading[record.name] ? <LoadingOutlined spin /> : <DownloadOutlined />}
                 onClick={() => handleDownloadReport(record.id, record.name)}
+                disabled={downloadLoading[record.name]}
               />
             </Tooltip>
           )}
@@ -505,8 +515,9 @@ const ExternalScans = () => {
             <Button
               key="download"
               type="primary"
-              icon={<DownloadOutlined />}
+              icon={downloadLoading[selectedScan?.name] ? <LoadingOutlined spin /> : <DownloadOutlined />}
               onClick={() => handleDownloadReport(selectedScan.id, selectedScan.name)}
+              loading={downloadLoading[selectedScan?.name]}
             >
               Download Report
             </Button>
