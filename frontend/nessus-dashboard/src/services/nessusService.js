@@ -93,6 +93,42 @@ class NessusService {
     }
   }
 
+  async downloadExternalScanReport(serverName) {
+    try {
+      console.log(`Downloading external scan report for server: ${serverName}`);
+      const response = await axios.get(`${API_URL}/external-scan/report/${serverName}`, {
+        responseType: 'blob',
+        withCredentials: true
+      });
+      
+      // Check if the response is valid
+      if (!response.data) {
+        throw new Error('Empty response received');
+      }
+
+      // Return the blob data for the component to handle
+      return response.data;
+    } catch (error) {
+      console.error('Error in downloadExternalScanReport:', error);
+      if (error.response && error.response.data instanceof Blob) {
+        // If it's a blob, parse it to get the error message
+        const text = await error.response.data.text();
+        try {
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.error || 'Error downloading external scan report');
+        } catch (jsonError) {
+          throw new Error('Error downloading external scan report');
+        }
+      } else if (error.response) {
+        throw new Error(error.response.data?.error || 'Server error during report download');
+      } else if (error.request) {
+        throw new Error('No response received from server');
+      } else {
+        throw new Error(error.message || 'Failed to download external scan report');
+      }
+    }
+  }
+
   async removeAgent(groupId, agentId) {
     try {
       console.log(`Attempting to remove agent ${agentId} from group ${groupId}`);

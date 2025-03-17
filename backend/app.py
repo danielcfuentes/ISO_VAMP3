@@ -1,3 +1,8 @@
+"""
+Updated Flask Backend with External Report Download Functionality
+Based on the original app.py and incorporating the new external report download code.
+"""
+
 # =============================================================================
 # IMPORTS AND SETUP
 # =============================================================================
@@ -139,6 +144,7 @@ def logout():
     """
     session.clear()
     return jsonify({'message': 'Logged out successfully'})
+
 # =============================================================================
 # AGENT AND GROUP MANAGEMENT ROUTES
 # =============================================================================
@@ -618,6 +624,11 @@ def get_external_scans_folder():
             if folder['name'] == 'ExternalScans':
                 return jsonify(folder)
         
+        # Also check for 'External Scans' folder (with space)
+        for folder in folders:
+            if folder['name'] == 'External Scans':
+                return jsonify(folder)
+        
         # Create folder if it doesn't exist
         create_folder_data = {'name': 'ExternalScans'}
         create_response = requests.post(
@@ -721,7 +732,7 @@ def list_external_scans():
         
         folder_id = None
         for folder in folders:
-            if folder['name'] == 'ExternalScans':
+            if folder['name'] == 'ExternalScans' or folder['name'] == 'External Scans':
                 folder_id = folder['id']
                 break
         
@@ -803,6 +814,125 @@ def stop_scan(scan_id):
         response.raise_for_status()
         return jsonify({'message': 'Scan stopped successfully'})
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# New route for specifically downloading external scan reports
+@app.route('/api/external-scan/report/<server_name>', methods=['GET'])
+@login_required
+def download_external_scan_report(server_name):
+    """
+    Generate and download a PDF report for a completed external scan
+    """
+    try:
+        # First get the ExternalScans folder
+        folders_response = requests.get(
+            f'{NESSUS_URL}/folders',
+            headers=get_headers(),
+            verify=False
+        )
+        folders_response.raise_for_status()
+        folders = folders_response.json().get('folders', [])
+        
+        folder_id = None
+        for folder in folders:
+            if folder['name'] == 'ExternalScans' or folder['name'] == 'External Scans':
+                folder_id = folder['id']
+                break
+        
+        if not folder_id:
+            return jsonify({'error': 'External Scans folder not found'}), 404
+        
+        # Find the scan for the server in the external scans folder
+        response = requests.get(
+            f'{NESSUS_URL}/scans',
+            params={'folder_id': folder_id},
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        scans = response.json().get('scans', [])
+        
+        scan = None
+        for s in scans:
+            if server_name.lower() in s['name'].lower():
+                scan = s
+                break
+        
+        if not scan:
+            return jsonify({'error': f'No external scan found for {server_name}'}), 404
+        
+        scan_id = scan['id']
+        
+        logging.info(f"Preparing to generate report for external scan ID {scan_id} ({server_name})")
+        
+        # Prepare export request
+        export_data = {
+            'format': 'pdf',
+            'template_id': REPORT_TEMPLATE_ID,
+            'chapters': 'vuln_hosts_summary'
+        }
+        
+        # Initiate report download
+        export_response = requests.post(
+            f'{NESSUS_URL}/scans/{scan_id}/export',
+            headers=get_headers(),
+            json=export_data,
+            verify=False
+        )
+        export_response.raise_for_status()
+        
+        if 'file' not in export_response.json():
+            return jsonify({'error': 'Failed to initiate report export'}), 500
+            
+        file_id = export_response.json()['file']
+        logging.info(f"Report export initiated with file ID: {file_id}")
+        
+        # Check status until ready (with timeout)
+        max_attempts = 30  # 30 seconds timeout
+        attempts = 0
+        
+        while attempts < max_attempts:
+            status_response = requests.get(
+                f'{NESSUS_URL}/scans/{scan_id}/export/{file_id}/status',
+                headers=get_headers(),
+                verify=False
+            )
+            status_response.raise_for_status()
+            status = status_response.json()
+            
+            if status.get('status') == 'ready':
+                logging.info("Report is ready for download")
+                break
+            elif status.get('status') == 'error':
+                return jsonify({'error': 'Error generating report'}), 500
+            
+            logging.debug(f"Report still generating (attempt {attempts+1}/{max_attempts})")
+            attempts += 1
+            time.sleep(1)
+        
+        if attempts >= max_attempts:
+            return jsonify({'error': 'Timeout while waiting for report generation'}), 504
+        
+        # Download the report
+        download_response = requests.get(
+            f'{NESSUS_URL}/scans/{scan_id}/export/{file_id}/download',
+            headers=get_headers(),
+            verify=False
+        )
+        download_response.raise_for_status()
+        
+        # Return the file as a download
+        filename = f"external_scan_report_{server_name}_{time.strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        return Response(
+            io.BytesIO(download_response.content),
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}'
+            }
+        )
+    except Exception as e:
+        logging.error(f"Error downloading external scan report: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # =============================================================================
