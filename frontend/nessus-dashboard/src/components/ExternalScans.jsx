@@ -11,7 +11,6 @@ import {
   Modal, 
   Alert, 
   message,
-  Divider,
   Tooltip,
   Spin
 } from 'antd';
@@ -24,11 +23,11 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   LoadingOutlined,
-  WarningOutlined,
-  MailOutlined
+  WarningOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import nessusService from '../services/nessusService';
+import VulDetailsModal from './VulDetailsModal';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -42,7 +41,6 @@ const ExternalScans = () => {
   const [selectedScan, setSelectedScan] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [externalScansFolder, setExternalScansFolder] = useState(null);
-  const [approvalModalVisible, setApprovalModalVisible] = useState(false);
   const [downloadLoading, setDownloadLoading] = useState({});
   
   // API URL
@@ -79,22 +77,6 @@ const ExternalScans = () => {
       message.error('Failed to fetch external scans');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSubmitApprovalRequest = async (values) => {
-    try {
-      setSubmitting(true);
-      // This would normally send an email to security@utep.edu
-      // For now, we'll just simulate it
-      
-      message.success('Approval request sent successfully');
-      setApprovalModalVisible(false);
-      setScanModalVisible(true);
-    } catch (error) {
-      message.error('Failed to send approval request');
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -277,65 +259,6 @@ const ExternalScans = () => {
     }
   ];
 
-  // Render vulnerability summary in detail modal
-  const renderVulnerabilitySummary = (hosts) => {
-    if (!hosts || hosts.length === 0) {
-      return <Alert message="No vulnerability data available" type="info" />;
-    }
-    
-    const hostColumns = [
-      {
-        title: 'Hostname',
-        dataIndex: 'hostname',
-        key: 'hostname',
-      },
-      {
-        title: 'IP Address',
-        dataIndex: 'ip',
-        key: 'ip',
-      },
-      {
-        title: 'Critical',
-        dataIndex: 'critical',
-        key: 'critical',
-        render: val => (val > 0 ? <Tag color="red">{val}</Tag> : val)
-      },
-      {
-        title: 'High',
-        dataIndex: 'high',
-        key: 'high',
-        render: val => (val > 0 ? <Tag color="orange">{val}</Tag> : val)
-      },
-      {
-        title: 'Medium',
-        dataIndex: 'medium',
-        key: 'medium',
-        render: val => (val > 0 ? <Tag color="gold">{val}</Tag> : val)
-      },
-      {
-        title: 'Low',
-        dataIndex: 'low',
-        key: 'low',
-        render: val => (val > 0 ? <Tag color="green">{val}</Tag> : val)
-      },
-      {
-        title: 'Info',
-        dataIndex: 'info',
-        key: 'info',
-        render: val => <Tag color="blue">{val}</Tag>
-      }
-    ];
-    
-    return (
-      <Table
-        columns={hostColumns}
-        dataSource={hosts.map((host, index) => ({ ...host, key: index }))}
-        pagination={false}
-        size="small"
-      />
-    );
-  };
-
   return (
     <div className="p-6">
       <Card className="shadow-sm mb-6">
@@ -349,20 +272,20 @@ const ExternalScans = () => {
           <Button 
             type="primary" 
             icon={<ScanOutlined />}
-            onClick={() => setApprovalModalVisible(true)}
+            onClick={() => setScanModalVisible(true)}
           >
-            Request New External Scan
+            New External Scan
           </Button>
         </div>
         
         <Paragraph className="text-gray-600 mb-4">
           External vulnerability scans allow you to assess the security posture of systems from an outside perspective. 
-          Before conducting an external scan, approval is required to ensure compliance with security policies.
+          These scans help identify vulnerabilities that could be exploited by external threats.
         </Paragraph>
         
         <Alert
           message="Important Notice"
-          description="External vulnerability scanning must be approved by the security team. Unauthorized scanning is prohibited and may result in account suspension."
+          description="External vulnerability scanning must be performed in accordance with security policies. Unauthorized scanning is prohibited and may result in account suspension."
           type="warning"
           showIcon
           className="mb-4"
@@ -374,76 +297,6 @@ const ExternalScans = () => {
           loading={loading}
         />
       </Card>
-      
-      {/* Approval Request Modal */}
-      <Modal
-        title={
-          <Space>
-            <MailOutlined />
-            Request Scan Approval
-          </Space>
-        }
-        open={approvalModalVisible}
-        onCancel={() => setApprovalModalVisible(false)}
-        footer={null}
-        width={600}
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmitApprovalRequest}
-        >
-          <Alert
-            message="A request will be sent to security@utep.edu for approval"
-            description="Please provide complete information to expedite approval. The security team will review your request and respond within 24-48 hours."
-            type="info"
-            showIcon
-            className="mb-4"
-          />
-          
-          <Form.Item
-            name="serverName"
-            label="Server/IP Address to Scan"
-            rules={[
-              { required: true, message: 'Please enter server name or IP address' },
-              { min: 3, message: 'Server name must be at least 3 characters' }
-            ]}
-          >
-            <Input 
-              placeholder="e.g., example.utep.edu or 192.168.1.1"
-              prefix={<GlobalOutlined style={{ color: '#bfbfbf' }} />}
-            />
-          </Form.Item>
-          
-          <Form.Item
-            name="justification"
-            label="Justification for Scan"
-            rules={[
-              { required: true, message: 'Please provide justification' },
-              { min: 20, message: 'Please provide a detailed justification (minimum 20 characters)' }
-            ]}
-          >
-            <TextArea
-              placeholder="Explain why this scan is necessary..."
-              rows={4}
-            />
-          </Form.Item>
-          
-          <Form.Item
-            name="contactInfo"
-            label="Contact Information"
-            rules={[{ required: true, message: 'Please provide contact information' }]}
-          >
-            <Input placeholder="Your name, department, and phone number" />
-          </Form.Item>
-          
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={submitting} block>
-              Submit Approval Request
-            </Button>
-          </Form.Item>
-        </Form>
-      </Modal>
       
       {/* Scan Creation Modal */}
       <Modal
@@ -462,14 +315,6 @@ const ExternalScans = () => {
           layout="vertical"
           onFinish={handleSubmitScan}
         >
-          <Alert
-            message="Scan Approved"
-            description="Your scan request has been approved. You can now proceed with creating the scan."
-            type="success"
-            showIcon
-            className="mb-4"
-          />
-          
           <Form.Item
             name="serverName"
             label="Server/IP Address"
@@ -497,56 +342,14 @@ const ExternalScans = () => {
         </Form>
       </Modal>
       
-      {/* Detail Modal */}
-      <Modal
-        title={
-          <Space>
-            <InfoCircleOutlined />
-            Scan Details: {selectedScan?.name}
-          </Space>
-        }
-        open={detailModalVisible}
-        onCancel={() => setDetailModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setDetailModalVisible(false)}>
-            Close
-          </Button>,
-          selectedScan?.status === 'completed' && (
-            <Button
-              key="download"
-              type="primary"
-              icon={downloadLoading[selectedScan?.name] ? <LoadingOutlined spin /> : <DownloadOutlined />}
-              onClick={() => handleDownloadReport(selectedScan.id, selectedScan.name)}
-              loading={downloadLoading[selectedScan?.name]}
-            >
-              Download Report
-            </Button>
-          )
-        ]}
-        width={800}
-      >
-        {selectedScan && (
-          <div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <Text strong>Status:</Text> {getStatusTag(selectedScan.status)}
-              </div>
-              <div>
-                <Text strong>Scan ID:</Text> {selectedScan.id}
-              </div>
-              <div>
-                <Text strong>Start Time:</Text> {formatTimestamp(selectedScan.start_time)}
-              </div>
-              <div>
-                <Text strong>End Time:</Text> {formatTimestamp(selectedScan.end_time)}
-              </div>
-            </div>
-            
-            <Divider orientation="left">Vulnerability Summary</Divider>
-            {renderVulnerabilitySummary(selectedScan.hosts)}
-          </div>
-        )}
-      </Modal>
+      {/* Vulnerability Details Modal - Now using the separate component */}
+      <VulDetailsModal
+        visible={detailModalVisible}
+        scan={selectedScan}
+        onClose={() => setDetailModalVisible(false)}
+        onDownload={handleDownloadReport}
+        downloadLoading={selectedScan ? downloadLoading[selectedScan.name] : false}
+      />
     </div>
   );
 };
