@@ -8,7 +8,6 @@ const API_URL = 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
 axios.defaults.headers.common['Content-Type'] = 'application/json';
 
-
 class NessusService {
   async login(username, password) {
     try {
@@ -277,9 +276,7 @@ class NessusService {
     }
   }
 
-
   // SCAN STATUS
-
   
   async findScanByServerName(serverName) {
     try {
@@ -344,6 +341,136 @@ class NessusService {
     }
   }
 
+  // NEW METHODS FOR EXTERNAL VULNERABILITY SCANNING
+
+  async getExternalScansFolder() {
+    try {
+      const response = await axios.get(`${API_URL}/external-scans/folder`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching external scans folder:', error);
+      throw new Error('Failed to fetch external scans folder');
+    }
+  }
+
+  async createExternalScan(serverName, folderId) {
+    try {
+      const response = await axios.post(`${API_URL}/external-scans/create`, {
+        server_name: serverName,
+        folder_id: folderId
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error creating external scan:', error);
+      throw new Error('Failed to create external scan');
+    }
+  }
+
+  async checkExistingExternalScan(serverName, folderId) {
+    try {
+      const response = await axios.get(`${API_URL}/external-scans/check-existing`, {
+        params: {
+          server_name: serverName,
+          folder_id: folderId
+        }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error checking existing external scan:', error);
+      throw new Error('Failed to check existing external scan');
+    }
+  }
+
+  async getExternalScans() {
+    try {
+      const response = await axios.get(`${API_URL}/external-scans`);
+      return response.data.scans || [];
+    } catch (error) {
+      console.error('Error fetching external scans:', error);
+      throw new Error('Failed to fetch external scans');
+    }
+  }
+
+  async stopExternalScan(scanId) {
+    try {
+      const response = await axios.post(`${API_URL}/external-scans/stop/${scanId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error stopping external scan:', error);
+      throw new Error('Failed to stop external scan');
+    }
+  }
+
+  async getExternalScanVulnerabilities(serverName) {
+    try {
+      const response = await axios.get(`${API_URL}/external-scan/vulnerabilities/${serverName}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching external scan vulnerabilities:', error);
+      throw new Error('Failed to fetch external scan vulnerabilities');
+    }
+  }
+
+  async getVulnerabilityPluginDetails(scanId, hostId, pluginId) {
+    try {
+      const response = await axios.get(`${API_URL}/external-scan/vulnerability-details/${scanId}/${hostId}/${pluginId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching vulnerability plugin details:', error);
+      throw new Error('Failed to fetch vulnerability plugin details');
+    }
+  }
+
+  async getExternalScanVulnerabilitySummary(serverName) {
+    try {
+      const response = await axios.get(`${API_URL}/external-scan/vulnerability-summary/${serverName}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching external scan vulnerability summary:', error);
+      throw new Error('Failed to fetch external scan vulnerability summary');
+    }
+  }
+
+  async createAndLaunchExternalScan(serverName) {
+    try {
+      // Get or create External Scans folder
+      const externalScansFolder = await this.getExternalScansFolder();
+      
+      if (!externalScansFolder || !externalScansFolder.id) {
+        throw new Error('Failed to get or create External Scans folder');
+      }
+      
+      // Check if scan already exists
+      const existingScan = await this.checkExistingExternalScan(serverName, externalScansFolder.id);
+      let scanId;
+      
+      if (!existingScan.exists) {
+        // Create new scan
+        const newScan = await this.createExternalScan(serverName, externalScansFolder.id);
+        if (!newScan || !newScan.scan || !newScan.scan.id) {
+          throw new Error('Failed to create external scan');
+        }
+        
+        scanId = newScan.scan.id;
+      } else {
+        scanId = existingScan.scan.id;
+      }
+      
+      // Launch the scan
+      await this.launchScan(scanId);
+      
+      return {
+        success: true,
+        scanId,
+        message: 'External scan created and launched successfully'
+      };
+    } catch (error) {
+      console.error('Error creating and launching external scan:', error);
+      throw new Error(error.message || 'Failed to create and launch external scan');
+    }
+  }
 }
 
 export default new NessusService();

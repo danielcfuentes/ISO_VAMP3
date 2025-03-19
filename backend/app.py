@@ -1,11 +1,7 @@
 """
-Updated Flask Backend with External Report Download Functionality
-Based on the original app.py and incorporating the new external report download code.
+Flask Backend with External Vulnerability Scanning Support
+Integrates the external vulnerability scanning functionality into the existing Flask app.
 """
-
-# =============================================================================
-# IMPORTS AND SETUP
-# =============================================================================
 
 from flask import Flask, jsonify, request, session, Response
 from flask_cors import CORS
@@ -16,6 +12,7 @@ import time
 import json
 import io
 from functools import wraps
+from datetime import datetime
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -74,6 +71,15 @@ def get_headers():
         'X-Cookie': f'token={session["token"]}',
         'Content-Type': 'application/json'
     }
+
+def format_timestamp(timestamp):
+    """Convert Unix timestamp to readable format"""
+    try:
+        if not timestamp:
+            return "N/A"
+        return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        return "N/A"
 
 # =============================================================================
 # AUTHENTICATION ROUTES
@@ -188,61 +194,6 @@ def get_group_details(group_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/agents', methods=['GET'])
-@login_required
-def get_agents():
-    try:
-        # Get user's group first
-        groups_response = requests.get(
-            f'{NESSUS_URL}/agent-groups',
-            headers=get_headers(),
-            verify=False
-        )
-        groups_response.raise_for_status()
-        
-        groups = groups_response.json().get('groups', [])
-        user_group = next(
-            (group for group in groups if group['name'] == session['username']),
-            None
-        )
-        
-        if not user_group:
-            return jsonify({'error': 'User group not found'}), 404
-            
-        # Get agents in the user's group
-        group_id = user_group['id']
-        agents_response = requests.get(
-            f'{NESSUS_URL}/agent-groups/{group_id}/agents',
-            headers=get_headers(),
-            verify=False
-        )
-        agents_response.raise_for_status()
-        
-        agents = agents_response.json().get('agents', [])
-        agent_details = []
-        
-        for agent in agents:
-            agent_id = agent.get('id')
-            agent_response = requests.get(
-                f'{NESSUS_URL}/agents/{agent_id}',
-                headers=get_headers(),
-                verify=False
-            )
-            if agent_response.status_code == 200:
-                agent_info = agent_response.json()
-                agent_details.append({
-                    'name': agent_info.get('name', 'Unknown'),
-                    'status': agent_info.get('status', 'unknown').lower(),
-                    'ipAddress': agent_info.get('ip', 'Unknown'),
-                    'lastPluginUpdate': agent_info.get('last_plugin_update', 'Never'),
-                    'lastScan': agent_info.get('last_scanned', 'Never'),
-                    'key': str(agent_id)
-                })
-        
-        return jsonify(agent_details)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    
 @app.route('/api/agent-groups/<int:group_id>/agents/<int:agent_id>', methods=['DELETE'])
 @login_required
 def remove_agent(group_id, agent_id):
@@ -264,20 +215,6 @@ def remove_agent(group_id, agent_id):
         return jsonify({'message': 'Agent removed successfully'})
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/agents/<int:agent_id>', methods=['GET'])
-@login_required
-def get_agent_details(agent_id):
-    try:
-        response = requests.get(
-            f'{NESSUS_URL}/agents/{agent_id}',
-            headers=get_headers(),
-            verify=False
-        )
-        response.raise_for_status()
-        return jsonify(response.json())
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -816,7 +753,10 @@ def stop_scan(scan_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# New route for specifically downloading external scan reports
+# =============================================================================
+# NEW EXTERNAL SCAN VULNERABILITY ENDPOINTS
+# =============================================================================
+
 @app.route('/api/external-scan/report/<server_name>', methods=['GET'])
 @login_required
 def download_external_scan_report(server_name):
@@ -933,6 +873,241 @@ def download_external_scan_report(server_name):
         )
     except Exception as e:
         logging.error(f"Error downloading external scan report: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/external-scan/vulnerabilities/<server_name>', methods=['GET'])
+@login_required
+def get_external_scan_vulnerabilities(server_name):
+    """
+    Get vulnerability details for an external scan
+    """
+    try:
+        # Get ExternalScans folder
+        folders_response = requests.get(
+            f'{NESSUS_URL}/folders',
+            headers=get_headers(),
+            verify=False
+        )
+        folders_response.raise_for_status()
+        folders = folders_response.json().get('folders', [])
+        
+        # Find external scans folder
+        folder_id = None
+        for folder in folders:
+            if folder['name'] == 'ExternalScans' or folder['name'] == 'External Scans':
+                folder_id = folder['id']
+                break
+        
+        if not folder_id:
+            return jsonify({'error': 'External Scans folder not found'}), 404
+        
+        # Find the scan for the server
+        scans_response = requests.get(
+            f'{NESSUS_URL}/scans',
+            params={'folder_id': folder_id},
+            headers=get_headers(),
+            verify=False
+        )
+        scans_response.raise_for_status()
+        scans = scans_response.json().get('scans', [])
+        
+        target_scan = None
+        for scan in scans:
+            if server_name.lower() in scan['name'].lower():
+                target_scan = scan
+                break
+        
+        if not target_scan:
+            return jsonify({'error': f'No external scan found for {server_name}'}), 404
+        
+        scan_id = target_scan['id']
+        
+        # Get detailed scan information
+        scan_details_response = requests.get(
+            f'{NESSUS_URL}/scans/{scan_id}',
+            headers=get_headers(),
+            verify=False
+        )
+        scan_details_response.raise_for_status()
+        scan_details = scan_details_response.json()
+        
+        # Format scan data for response
+        scan_data = {
+            'id': scan_id,
+            'name': target_scan.get('name'),
+            'status': scan_details.get('info', {}).get('status', 'unknown'),
+            'start_time': format_timestamp(scan_details.get('info', {}).get('scan_start')),
+            'end_time': format_timestamp(scan_details.get('info', {}).get('scan_end')),
+            'targets': scan_details.get('info', {}).get('targets', ''),
+            'hosts': []
+        }
+        
+        # Get vulnerability data for each host
+        if 'hosts' in scan_details:
+            for host in scan_details.get('hosts', []):
+                host_id = host.get('host_id')
+                if not host_id:
+                    continue
+                    
+                # Get host vulnerabilities
+                host_vuln_response = requests.get(
+                    f'{NESSUS_URL}/scans/{scan_id}/hosts/{host_id}',
+                    headers=get_headers(),
+                    verify=False
+                )
+                if host_vuln_response.status_code != 200:
+                    continue
+                    
+                host_vuln_data = host_vuln_response.json()
+                
+                # Format host vulnerability data
+                host_data = {
+                    'id': host_id,
+                    'hostname': host.get('hostname', 'N/A'),
+                    'ip': host.get('host-ip', host.get('hostname', 'N/A')),
+                    'os': host_vuln_data.get('info', {}).get('operating-system', 'Unknown'),
+                    'critical': host.get('critical', 0),
+                    'high': host.get('high', 0),
+                    'medium': host.get('medium', 0),
+                    'low': host.get('low', 0),
+                    'info': host.get('info', 0),
+                    'vulnerabilities': []
+                }
+                
+                # Add vulnerability details
+                for vuln in host_vuln_data.get('vulnerabilities', []):
+                    severity_levels = {4: "Critical", 3: "High", 2: "Medium", 1: "Low", 0: "Info"}
+                    
+                    host_data['vulnerabilities'].append({
+                        'plugin_id': vuln.get('plugin_id'),
+                        'plugin_name': vuln.get('plugin_name'),
+                        'severity': vuln.get('severity', 0),
+                        'severity_name': severity_levels.get(vuln.get('severity', 0), "Unknown"),
+                        'count': vuln.get('count', 1)
+                    })
+                
+                scan_data['hosts'].append(host_data)
+        
+        return jsonify(scan_data)
+    except Exception as e:
+        logging.error(f"Error fetching external scan vulnerabilities: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/external-scan/vulnerability-details/<int:scan_id>/<int:host_id>/<int:plugin_id>', methods=['GET'])
+@login_required
+def get_vulnerability_plugin_details(scan_id, host_id, plugin_id):
+    """
+    Get detailed information about a specific vulnerability plugin for a host
+    """
+    try:
+        # Fetch plugin details
+        plugin_response = requests.get(
+            f'{NESSUS_URL}/scans/{scan_id}/hosts/{host_id}/plugins/{plugin_id}',
+            headers=get_headers(),
+            verify=False
+        )
+        plugin_response.raise_for_status()
+        plugin_data = plugin_response.json()
+        
+        if not plugin_data or 'info' not in plugin_data:
+            return jsonify({'error': 'No plugin data available'}), 404
+        
+        # Extract and format plugin information
+        plugin_desc = plugin_data['info'].get('plugindescription', {})
+        plugin_attrs = plugin_desc.get('pluginattributes', {})
+        risk_info = plugin_attrs.get('risk_information', {})
+        plugin_info = plugin_attrs.get('plugin_information', {})
+        
+        formatted_data = {
+            'plugin_id': plugin_desc.get('pluginid'),
+            'name': plugin_desc.get('pluginname'),
+            'family': plugin_desc.get('pluginfamily'),
+            'severity': plugin_desc.get('severity'),
+            'risk_factor': risk_info.get('risk_factor'),
+            'plugin_type': plugin_info.get('plugin_type'),
+            'plugin_modification_date': plugin_info.get('plugin_modification_date'),
+            'synopsis': plugin_attrs.get('synopsis'),
+            'description': plugin_attrs.get('description'),
+            'solution': plugin_attrs.get('solution'),
+            'see_also': plugin_attrs.get('see_also'),
+            'cve': plugin_attrs.get('cve'),
+            'cvss_base_score': plugin_attrs.get('cvss_base_score'),
+            'cvss3_base_score': plugin_attrs.get('cvss3_base_score'),
+            'outputs': []
+        }
+        
+        # Add plugin outputs if available
+        if 'output' in plugin_data:
+            for output in plugin_data['output']:
+                if isinstance(output, dict) and 'plugin_output' in output:
+                    formatted_data['outputs'].append(output['plugin_output'])
+                elif isinstance(output, str):
+                    formatted_data['outputs'].append(output)
+        
+        return jsonify(formatted_data)
+    except Exception as e:
+        logging.error(f"Error fetching vulnerability details: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/external-scan/vulnerability-summary/<server_name>', methods=['GET'])
+@login_required
+def get_vulnerability_summary(server_name):
+    """
+    Get a summary of vulnerabilities for an external scan by severity
+    """
+    try:
+        # First get the scan details using the existing endpoint
+        scan_data_response = get_external_scan_vulnerabilities(server_name)
+        
+        # If the response is an error, return it
+        if isinstance(scan_data_response, tuple):
+            return scan_data_response
+            
+        # Otherwise, process the data
+        scan_data = json.loads(scan_data_response.get_data(as_text=True))
+        
+        # Create summary data structure
+        summary = {
+            'scan_id': scan_data.get('id'),
+            'name': scan_data.get('name'),
+            'status': scan_data.get('status'),
+            'start_time': scan_data.get('start_time'),
+            'end_time': scan_data.get('end_time'),
+            'host_count': len(scan_data.get('hosts', [])),
+            'severity_counts': {
+                'critical': 0,
+                'high': 0,
+                'medium': 0,
+                'low': 0,
+                'info': 0
+            },
+            'hosts': []
+        }
+        
+        # Process each host
+        for host in scan_data.get('hosts', []):
+            host_summary = {
+                'hostname': host.get('hostname'),
+                'ip': host.get('ip'),
+                'critical': host.get('critical', 0),
+                'high': host.get('high', 0), 
+                'medium': host.get('medium', 0),
+                'low': host.get('low', 0),
+                'info': host.get('info', 0)
+            }
+            
+            # Add to total counts
+            summary['severity_counts']['critical'] += host.get('critical', 0)
+            summary['severity_counts']['high'] += host.get('high', 0)
+            summary['severity_counts']['medium'] += host.get('medium', 0)
+            summary['severity_counts']['low'] += host.get('low', 0)
+            summary['severity_counts']['info'] += host.get('info', 0)
+            
+            summary['hosts'].append(host_summary)
+        
+        return jsonify(summary)
+    except Exception as e:
+        logging.error(f"Error generating vulnerability summary: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # =============================================================================
