@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Modal, Button, Typography, Divider, Table, Tag, Space, 
-  Alert, Tabs, Collapse, Descriptions, Badge, Progress, Spin 
+  Alert, Tabs, Collapse, Descriptions, Badge, Progress, Spin, message 
 } from 'antd';
 import { 
   InfoCircleOutlined, 
@@ -12,9 +12,11 @@ import {
   StopOutlined,
   WarningOutlined,
   BugOutlined,
-  BarChartOutlined
+  BarChartOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
+import ExceptionRequestFormModal from './ExceptionRequestFormModal';
 
 const { Text, Title, Paragraph } = Typography;
 const { Panel } = Collapse;
@@ -31,6 +33,7 @@ const InternalScanVulDetailsModal = ({
   const [activeTabKey, setActiveTabKey] = useState('summary');
   const [expandedRows, setExpandedRows] = useState({});
   const [pluginDetails, setPluginDetails] = useState({});
+  const [exceptionModalVisible, setExceptionModalVisible] = useState(false);
 
   // Fetch vulnerability data when scan is selected and modal is opened
   useEffect(() => {
@@ -394,6 +397,35 @@ const InternalScanVulDetailsModal = ({
     );
   };
 
+  // Add function to check if critical, high, or medium vulnerabilities exist
+  const hasHighSeverityVulnerabilities = () => {
+    if (!vulnerabilityData || !vulnerabilityData.hosts) return false;
+    
+    return vulnerabilityData.hosts.some(host => 
+      host.critical > 0 || host.high > 0 || host.medium > 0
+    );
+  };
+
+  // Get all vulnerabilities of desired severity levels
+  const getHighSeverityVulnerabilities = () => {
+    if (!vulnerabilityData || !vulnerabilityData.hosts) return [];
+    
+    const vulnerabilities = [];
+    vulnerabilityData.hosts.forEach(host => {
+      host.vulnerabilities.forEach(vuln => {
+        if (vuln.severity >= 2) { // Medium (2), High (3), or Critical (4)
+          vulnerabilities.push({
+            ...vuln,
+            host_id: host.id,
+            host_name: host.hostname || host.ip
+          });
+        }
+      });
+    });
+    
+    return vulnerabilities;
+  };
+
   return (
     <Modal
       title={
@@ -408,6 +440,17 @@ const InternalScanVulDetailsModal = ({
         <Button key="close" onClick={onClose}>
           Close
         </Button>,
+        hasHighSeverityVulnerabilities() && (
+          <Button
+            key="exception"
+            type="primary"
+            danger
+            icon={<FileTextOutlined />}
+            onClick={() => setExceptionModalVisible(true)}
+          >
+            Request Exception
+          </Button>
+        ),
         scan?.status === 'completed' && (
           <Button
             key="download"
@@ -458,6 +501,21 @@ const InternalScanVulDetailsModal = ({
           />
         </div>
       )}
+      
+      {/* Add ExceptionRequestFormModal */}
+      <ExceptionRequestFormModal
+        visible={exceptionModalVisible}
+        onClose={() => setExceptionModalVisible(false)}
+        serverName={scan?.name}
+        vulnerabilities={getHighSeverityVulnerabilities()}
+        onSubmit={async (values) => {
+          // Here you would submit the exception request
+          console.log("Submitting exception request:", values);
+          // TODO: Add actual API call
+          message.success(`Exception request submitted for ${scan?.name}`);
+          setExceptionModalVisible(false);
+        }}
+      />
     </Modal>
   );
 };
