@@ -14,7 +14,7 @@ const MainLayout = ({ children, isAdmin, onLogout }) => {
     {
       key: '/my-agents',
       icon: <DesktopOutlined />,
-      label: 'My Agents',
+      label: 'Internal Agent Scans',
     },
     {
       key: '/external-scans',

@@ -81,6 +81,53 @@ def format_timestamp(timestamp):
     except:
         return "N/A"
 
+def get_scan_details(nessus_url, token, scan_id):
+    """Get detailed information about a specific scan"""
+    try:
+        headers = {'X-Cookie': f'token={token}'}
+        response = requests.get(
+            f'{nessus_url}/scans/{scan_id}',
+            headers=headers,
+            verify=False
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error getting scan details: {e}")
+        return None
+
+def get_host_vulnerabilities(nessus_url, token, scan_id, host_id, history_id=None):
+    """Get vulnerability details for a specific host in a scan"""
+    try:
+        headers = {'X-Cookie': f'token={token}'}
+        url = f'{nessus_url}/scans/{scan_id}/hosts/{host_id}'
+        
+        if history_id:
+            url += f'?history_id={history_id}'
+            
+        response = requests.get(url, headers=headers, verify=False)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error getting host vulnerabilities: {e}")
+        return None
+
+def get_plugin_details(nessus_url, token, scan_id, host_id, plugin_id, history_id=None):
+    """Get detailed information about a specific vulnerability plugin"""
+    try:
+        headers = {'X-Cookie': f'token={token}'}
+        url = f'{nessus_url}/scans/{scan_id}/hosts/{host_id}/plugins/{plugin_id}'
+        
+        if history_id:
+            url += f'?history_id={history_id}'
+            
+        response = requests.get(url, headers=headers, verify=False)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error getting plugin details for plugin {plugin_id}: {e}")
+        return None
+
 # =============================================================================
 # AUTHENTICATION ROUTES
 # =============================================================================
@@ -1108,6 +1155,236 @@ def get_vulnerability_summary(server_name):
         return jsonify(summary)
     except Exception as e:
         logging.error(f"Error generating vulnerability summary: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# INTERNAL SCAN VULNERABILITY ENDPOINTS
+# =============================================================================
+
+@app.route('/api/internal-scan/vulnerabilities/<server_name>', methods=['GET'])
+@login_required
+def get_internal_scan_vulnerabilities(server_name):
+    try:
+        # Get current session token
+        token = session.get('token')
+        if not token:
+            return jsonify({'error': 'No valid session'}), 401
+
+        # First find the scan for the server
+        scans_response = requests.get(
+            f'{NESSUS_URL}/scans',
+            headers=get_headers(),
+            verify=False
+        )
+        scans_response.raise_for_status()
+        scans = scans_response.json().get('scans', [])
+        
+        target_scan = None
+        for scan in scans:
+            if server_name.lower() in scan['name'].lower():
+                target_scan = scan
+                break
+        
+        if not target_scan:
+            return jsonify({'error': f'No scan found for {server_name}'}), 404
+
+        # Get detailed scan information
+        scan_details = get_scan_details(NESSUS_URL, token, target_scan['id'])
+        
+        if not scan_details:
+            return jsonify({'error': 'Failed to get scan details'}), 500
+
+        # Format scan data for response
+        scan_data = {
+            'id': target_scan['id'],
+            'name': target_scan['name'],
+            'status': scan_details.get('info', {}).get('status', 'unknown'),
+            'start_time': format_timestamp(scan_details.get('info', {}).get('scan_start')),
+            'end_time': format_timestamp(scan_details.get('info', {}).get('scan_end')),
+            'hosts': []
+        }
+
+        # Get history_id from scan details if available
+        history_id = scan_details.get('info', {}).get('history_id')
+
+        # Process each host
+        for host in scan_details.get('hosts', []):
+            host_id = host.get('host_id')
+            if not host_id:
+                continue
+
+            # Get host vulnerabilities
+            host_vuln_data = get_host_vulnerabilities(
+                NESSUS_URL, token, target_scan['id'], host_id, history_id
+            )
+
+            if not host_vuln_data:
+                continue
+
+            host_data = {
+                'id': host_id,
+                'hostname': host.get('hostname', 'N/A'),
+                'ip': host.get('host-ip', host.get('hostname', 'N/A')),
+                'os': host_vuln_data.get('info', {}).get('operating-system', 'Unknown'),
+                'critical': host.get('critical', 0),
+                'high': host.get('high', 0),
+                'medium': host.get('medium', 0),
+                'low': host.get('low', 0),
+                'info': host.get('info', 0),
+                'vulnerabilities': []
+            }
+
+            # Process vulnerabilities
+            for vuln in host_vuln_data.get('vulnerabilities', []):
+                severity_levels = {4: "Critical", 3: "High", 2: "Medium", 1: "Low", 0: "Info"}
+                
+                host_data['vulnerabilities'].append({
+                    'plugin_id': vuln.get('plugin_id'),
+                    'plugin_name': vuln.get('plugin_name'),
+                    'severity': vuln.get('severity', 0),
+                    'severity_name': severity_levels.get(vuln.get('severity', 0), "Unknown"),
+                    'count': vuln.get('count', 1)
+                })
+
+            scan_data['hosts'].append(host_data)
+
+        return jsonify(scan_data)
+
+    except Exception as e:
+        logging.error(f"Error processing internal scan vulnerabilities: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/internal-scan/vulnerability-details/<int:scan_id>/<int:host_id>/<int:plugin_id>', methods=['GET'])
+@login_required
+def get_internal_vulnerability_plugin_details(scan_id, host_id, plugin_id):
+    try:
+        token = session.get('token')
+        if not token:
+            return jsonify({'error': 'No valid session'}), 401
+
+        plugin_data = get_plugin_details(NESSUS_URL, token, scan_id, host_id, plugin_id)
+        
+        if not plugin_data or 'info' not in plugin_data:
+            return jsonify({'error': 'No plugin data available'}), 404
+
+        plugin_desc = plugin_data['info'].get('plugindescription', {})
+        plugin_attrs = plugin_desc.get('pluginattributes', {})
+        risk_info = plugin_attrs.get('risk_information', {})
+        plugin_info = plugin_attrs.get('plugin_information', {})
+
+        formatted_data = {
+            'plugin_id': plugin_desc.get('pluginid'),
+            'name': plugin_desc.get('pluginname'),
+            'family': plugin_desc.get('pluginfamily'),
+            'severity': plugin_desc.get('severity'),
+            'risk_factor': risk_info.get('risk_factor'),
+            'synopsis': plugin_attrs.get('synopsis'),
+            'description': plugin_attrs.get('description'),
+            'solution': plugin_attrs.get('solution'),
+            'see_also': plugin_attrs.get('see_also'),
+            'cve': plugin_attrs.get('cve'),
+            'cvss_base_score': plugin_attrs.get('cvss_base_score'),
+            'cvss3_base_score': plugin_attrs.get('cvss3_base_score'),
+            'plugin_publication_date': plugin_info.get('plugin_publication_date'),
+            'plugin_modification_date': plugin_info.get('plugin_modification_date'),
+            'outputs': []
+        }
+
+        if 'output' in plugin_data:
+            for output in plugin_data['output']:
+                if isinstance(output, dict) and 'plugin_output' in output:
+                    formatted_data['outputs'].append(output['plugin_output'])
+                elif isinstance(output, str):
+                    formatted_data['outputs'].append(output)
+
+        return jsonify(formatted_data)
+
+    except Exception as e:
+        logging.error(f"Error getting plugin details: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/internal-scan/report/<server_name>', methods=['GET'])
+@login_required
+def download_internal_scan_report(server_name):
+    try:
+        token = session.get('token')
+        if not token:
+            return jsonify({'error': 'No valid session'}), 401
+
+        # Find scan for the server
+        response = requests.get(
+            f'{NESSUS_URL}/scans',
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        scans = response.json().get('scans', [])
+        
+        scan = None
+        for s in scans:
+            if server_name.lower() in s['name'].lower():
+                scan = s
+                break
+
+        if not scan:
+            return jsonify({'error': 'Scan not found'}), 404
+
+        scan_id = scan['id']
+        
+        # Prepare export request
+        export_data = {
+            'format': 'pdf',
+            'template_id': REPORT_TEMPLATE_ID,
+            'chapters': 'vuln_hosts_summary'
+        }
+        
+        # Initiate report download
+        export_response = requests.post(
+            f'{NESSUS_URL}/scans/{scan_id}/export',
+            headers=get_headers(),
+            json=export_data,
+            verify=False
+        )
+        export_response.raise_for_status()
+        file_id = export_response.json()['file']
+        
+        # Check status until ready
+        while True:
+            status_response = requests.get(
+                f'{NESSUS_URL}/scans/{scan_id}/export/{file_id}/status',
+                headers=get_headers(),
+                verify=False
+            )
+            status_response.raise_for_status()
+            status = status_response.json()
+            
+            if status.get('status') == 'ready':
+                break
+            elif status.get('status') == 'error':
+                return jsonify({'error': 'Error generating report'}), 500
+                
+            time.sleep(1)
+        
+        # Download the report
+        download_response = requests.get(
+            f'{NESSUS_URL}/scans/{scan_id}/export/{file_id}/download',
+            headers=get_headers(),
+            verify=False
+        )
+        download_response.raise_for_status()
+        
+        # Return the file as a download
+        filename = f"internal_scan_report_{server_name}_{time.strftime('%Y%m%d_%H%M%S')}.pdf"
+        return Response(
+            io.BytesIO(download_response.content),
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}'
+            }
+        )
+
+    except Exception as e:
+        logging.error(f"Error downloading report: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # =============================================================================

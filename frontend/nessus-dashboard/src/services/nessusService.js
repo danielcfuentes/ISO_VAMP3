@@ -471,6 +471,181 @@ class NessusService {
       throw new Error(error.message || 'Failed to create and launch external scan');
     }
   }
+
+  // INTERNAL SCAN METHODS
+  
+  async getInternalScans() {
+    try {
+      const response = await axios.get(`${API_URL}/internal-scans`);
+      return response.data.scans || [];
+    } catch (error) {
+      console.error('Error fetching internal scans:', error);
+      throw new Error('Failed to fetch internal scans');
+    }
+  }
+
+  async getInternalScansFolder() {
+    try {
+      const response = await axios.get(`${API_URL}/internal-scans/folder`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching internal scans folder:', error);
+      throw new Error('Failed to fetch internal scans folder');
+    }
+  }
+
+  async createInternalScan(serverName, folderId) {
+    try {
+      const response = await axios.post(`${API_URL}/internal-scans/create`, {
+        server_name: serverName,
+        folder_id: folderId
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error creating internal scan:', error);
+      throw new Error('Failed to create internal scan');
+    }
+  }
+
+  async checkExistingInternalScan(serverName, folderId) {
+    try {
+      const response = await axios.get(`${API_URL}/internal-scans/check-existing`, {
+        params: {
+          server_name: serverName,
+          folder_id: folderId
+        }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error checking existing internal scan:', error);
+      throw new Error('Failed to check existing internal scan');
+    }
+  }
+
+  async getInternalScanVulnerabilities(serverName) {
+    try {
+      const response = await axios.get(
+        `${API_URL}/internal-scan/vulnerabilities/${serverName}`,
+        { withCredentials: true }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching internal scan vulnerabilities:', error);
+      throw new Error(error.response?.data?.error || 'Failed to fetch vulnerabilities');
+    }
+  }
+
+  async getInternalScanVulnerabilitySummary(serverName) {
+    try {
+      const response = await axios.get(`${API_URL}/internal-scan/vulnerability-summary/${serverName}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching internal scan vulnerability summary:', error);
+      throw new Error('Failed to fetch internal scan vulnerability summary');
+    }
+  }
+
+  async downloadInternalScanReport(serverName) {
+    try {
+      const response = await axios.get(
+        `${API_URL}/internal-scan/report/${serverName}`,
+        {
+          responseType: 'blob',
+          withCredentials: true
+        }
+      );
+      
+      // Check if the response is valid
+      if (!response.data) {
+        throw new Error('Empty response received');
+      }
+
+      // Return the blob data for the component to handle
+      return response.data;
+    } catch (error) {
+      console.error('Error downloading internal scan report:', error);
+      if (error.response && error.response.data instanceof Blob) {
+        // If it's a blob, parse it to get the error message
+        try {
+          const text = await error.response.data.text();
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.error || 'Error downloading internal scan report');
+        } catch (_) {
+          throw new Error('Error downloading internal scan report');
+        }
+      } else if (error.response) {
+        throw new Error(error.response.data?.error || 'Server error during report download');
+      } else if (error.request) {
+        throw new Error('No response received from server');
+      } else {
+        throw new Error(error.message || 'Failed to download internal scan report');
+      }
+    }
+  }
+
+  async getInternalVulnerabilityPluginDetails(scanId, hostId, pluginId) {
+    try {
+      const response = await axios.get(
+        `${API_URL}/internal-scan/vulnerability-details/${scanId}/${hostId}/${pluginId}`,
+        { withCredentials: true }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching vulnerability plugin details:', error);
+      throw new Error(error.response?.data?.error || 'Failed to fetch plugin details');
+    }
+  }
+
+  async stopInternalScan(scanId) {
+    try {
+      const response = await axios.post(`${API_URL}/internal-scan/stop/${scanId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error stopping internal scan:', error);
+      throw new Error('Failed to stop internal scan');
+    }
+  }
+
+  async createAndLaunchInternalScan(serverName) {
+    try {
+      // Get or create Internal Scans folder
+      const internalScansFolder = await this.getInternalScansFolder();
+      
+      if (!internalScansFolder || !internalScansFolder.id) {
+        throw new Error('Failed to get or create Internal Scans folder');
+      }
+      
+      // Check if scan already exists
+      const existingScan = await this.checkExistingInternalScan(serverName, internalScansFolder.id);
+      let scanId;
+      
+      if (!existingScan.exists) {
+        // Create new scan
+        const newScan = await this.createInternalScan(serverName, internalScansFolder.id);
+        if (!newScan || !newScan.scan || !newScan.scan.id) {
+          throw new Error('Failed to create internal scan');
+        }
+        
+        scanId = newScan.scan.id;
+      } else {
+        scanId = existingScan.scan.id;
+      }
+      
+      // Launch the scan
+      await this.launchScan(scanId);
+      
+      return {
+        success: true,
+        scanId,
+        message: 'Internal scan created and launched successfully'
+      };
+    } catch (error) {
+      console.error('Error creating and launching internal scan:', error);
+      throw new Error(error.message || 'Failed to create and launch internal scan');
+    }
+  }
 }
 
 export default new NessusService();

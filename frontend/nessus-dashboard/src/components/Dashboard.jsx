@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Layout, Space, Tag, Typography, Card, message, Tooltip, Progress } from 'antd';
-import { PlayCircleOutlined, LoadingOutlined, CheckCircleOutlined, DownloadOutlined, DeleteOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback } from 'react';
+import { Table, Button, Layout, Space, Tag, Typography, Card, message, Tooltip } from 'antd';
+import { PlayCircleOutlined, LoadingOutlined, DownloadOutlined, DeleteOutlined, BugOutlined } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
-import LaunchScanModal from './LaunchScanModal';
+import InternalScanVulDetailsModal from './InternalScanVulDetailsModal';
 
 const { Title } = Typography;
 const { Header, Content } = Layout;
@@ -14,11 +14,11 @@ const Dashboard = () => {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [selectedServerToDelete, setSelectedServerToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [scanLoading, setScanLoading] = useState({});
   const [scanStates, setScanStates] = useState({});
-  const [activePollingJobs, setActivePollingJobs] = useState(new Set());
   const [statusCheckIntervals, setStatusCheckIntervals] = useState({});
   const [downloadLoading, setDownloadLoading] = useState({});
+  const [internalVulModalVisible, setInternalVulModalVisible] = useState(false);
+  const [selectedScanForVul, setSelectedScanForVul] = useState(null);
 
     // Fetch initial scan states when component mounts
     useEffect(() => {
@@ -178,6 +178,25 @@ const Dashboard = () => {
     }
   };
 
+  const handleViewVulnerabilities = (server) => {
+    // Check if there's a completed scan for this server
+    const scanState = scanStates[server.name];
+    if (!scanState || scanState.status !== 'completed') {
+      message.warning('No completed scan available to view');
+      return;
+    }
+    
+    // Set the selected scan and open the modal
+    setSelectedScanForVul({
+      id: scanState.scanId,
+      name: server.name,
+      status: scanState.status,
+      start_time: scanState.startTime,
+      end_time: scanState.endTime
+    });
+    setInternalVulModalVisible(true);
+  };
+
   const handleDownloadReport = async (server) => {
     try {
       setDownloadLoading(prev => ({ ...prev, [server.name]: true }));
@@ -190,17 +209,20 @@ const Dashboard = () => {
       }
       
       // Download the report
-      const blob = await nessusService.downloadReport(server.name);
+      const blob = await nessusService.downloadInternalScanReport(server.name);
       
       // Create a download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `nessus_report_${server.name}_${new Date().toISOString().split('T')[0]}.pdf`);
+      link.setAttribute(
+        'download', 
+        `internal_scan_${server.name}_${new Date().toISOString().split('T')[0]}.pdf`
+      );
       document.body.appendChild(link);
-      
-      // Trigger download and cleanup
       link.click();
+      
+      // Cleanup
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
       
@@ -427,13 +449,21 @@ const Dashboard = () => {
       key: 'actions',
       render: (_, record) => (
         <Space size="middle">
+          <Tooltip title="View Vulnerabilities">
+            <Button 
+              type="text"
+              icon={<BugOutlined />}
+              onClick={() => handleViewVulnerabilities(record)}
+              disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
+            />
+          </Tooltip>
           <Tooltip title="Download Report">
             <Button 
               type="text"
-              icon={<DownloadOutlined />}
+              icon={downloadLoading[record.name] ? <LoadingOutlined /> : <DownloadOutlined />}
               onClick={() => handleDownloadReport(record)}
-              loading={downloadLoading[record.name]}
               disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
+              loading={downloadLoading[record.name]}
             />
           </Tooltip>
           {getScanActionButton(record)}
@@ -471,6 +501,14 @@ const Dashboard = () => {
           />
         </Card>
       </Content>
+
+      <InternalScanVulDetailsModal
+        visible={internalVulModalVisible}
+        scan={selectedScanForVul}
+        onClose={() => setInternalVulModalVisible(false)}
+        onDownload={handleDownloadReport}
+        downloadLoading={selectedScanForVul ? downloadLoading[selectedScanForVul.name] : false}
+      />
 
       <DeleteConfirmationModal
         visible={deleteModalVisible}
