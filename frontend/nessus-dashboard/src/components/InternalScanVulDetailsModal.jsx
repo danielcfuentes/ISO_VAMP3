@@ -294,8 +294,9 @@ const InternalScanVulDetailsModal = ({
             
             <Table
               dataSource={
-                // Sort vulnerabilities by severity (highest first)
+                // Sort vulnerabilities by severity (highest first) and filter out Info severity (0)
                 [...host.vulnerabilities]
+                  .filter(vuln => vuln.severity > 0)  // Only include Low and above (exclude Info which is 0)
                   .sort((a, b) => b.severity - a.severity)
                   .map((vuln, idx) => ({ ...vuln, key: idx }))
               }

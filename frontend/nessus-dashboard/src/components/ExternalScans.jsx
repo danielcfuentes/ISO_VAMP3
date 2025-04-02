@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Card, 
   Typography, 
@@ -11,8 +11,7 @@ import {
   Modal, 
   Alert, 
   message,
-  Tooltip,
-  Spin
+  Tooltip
 } from 'antd';
 import { 
   ScanOutlined, 
@@ -23,14 +22,13 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   LoadingOutlined,
-  WarningOutlined
+  BugOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import nessusService from '../services/nessusService';
 import VulDetailsModal from './VulDetailsModal';
 
-const { Title, Text, Paragraph } = Typography;
-const { TextArea } = Input;
+const { Title, Paragraph } = Typography;
 
 const ExternalScans = () => {
   const [form] = Form.useForm();
@@ -247,10 +245,10 @@ const ExternalScans = () => {
             </Tooltip>
           )}
           
-          <Tooltip title="View Details">
+          <Tooltip title="View Vulnerabilities">
             <Button 
               type="text"
-              icon={<InfoCircleOutlined />}
+              icon={<BugOutlined />}
               onClick={() => handleViewDetails(record)}
             />
           </Tooltip>
