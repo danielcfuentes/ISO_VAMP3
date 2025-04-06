@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Layout, Space, Tag, Typography, Card, message, Tooltip } from 'antd';
-import { PlayCircleOutlined, LoadingOutlined, DownloadOutlined, DeleteOutlined, BugOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, LoadingOutlined, DownloadOutlined, DeleteOutlined, BugOutlined, StopOutlined } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 import InternalScanVulDetailsModal from './InternalScanVulDetailsModal';
@@ -272,12 +272,41 @@ const Dashboard = () => {
     }
   };
 
+  const handleStopScan = async (scanId, serverName) => {
+    try {
+      await nessusService.stopInternalScan(scanId);
+      message.success(`Scan for ${serverName} stopped successfully`);
+      
+      // Update scan state to reflect the stopped scan
+      setScanStates(prev => ({
+        ...prev,
+        [serverName]: {
+          ...prev[serverName],
+          status: 'canceled'
+        }
+      }));
+      
+      // Clear interval if it exists
+      if (statusCheckIntervals[serverName]) {
+        clearInterval(statusCheckIntervals[serverName]);
+        setStatusCheckIntervals(prev => {
+          const newIntervals = { ...prev };
+          delete newIntervals[serverName];
+          return newIntervals;
+        });
+      }
+    } catch (error) {
+      console.error('Error stopping scan:', error);
+      message.error(`Failed to stop scan: ${error.message}`);
+    }
+  };
+
  
   // Simplified action button without progress and tooltip
   const getScanActionButton = (record) => {
     const scanState = scanStates[record.name];
     
-    if (!scanState || scanState.status === 'completed') {
+    if (!scanState || scanState.status === 'completed' || scanState.status === 'canceled') {
       return (
         <Button
           type="text"
@@ -434,6 +463,8 @@ const Dashboard = () => {
           running: 'processing',
           completed: 'success',
           starting: 'warning',
+          pending: 'warning',
+          canceled: 'default',
           failed: 'error'
         };
 
@@ -447,35 +478,50 @@ const Dashboard = () => {
     {
       title: 'Actions',
       key: 'actions',
-      render: (_, record) => (
-        <Space size="middle">
-          <Tooltip title="View Vulnerabilities">
-            <Button 
+      render: (_, record) => {
+        const scanState = scanStates[record.name];
+        
+        return (
+          <Space size="middle">
+            <Tooltip title="View Vulnerabilities">
+              <Button 
+                type="text"
+                icon={<BugOutlined />}
+                onClick={() => handleViewVulnerabilities(record)}
+                disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
+              />
+            </Tooltip>
+            <Tooltip title="Download Report">
+              <Button 
+                type="text"
+                icon={downloadLoading[record.name] ? <LoadingOutlined /> : <DownloadOutlined />}
+                onClick={() => handleDownloadReport(record)}
+                disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
+                loading={downloadLoading[record.name]}
+              />
+            </Tooltip>
+            {scanState && ['running', 'pending'].includes(scanState.status) ? (
+              <Tooltip title="Stop Scan">
+                <Button
+                  type="text"
+                  danger
+                  icon={<StopOutlined />}
+                  onClick={() => handleStopScan(scanState.scanId, record.name)}
+                />
+              </Tooltip>
+            ) : (
+              getScanActionButton(record)
+            )}
+            <Button
               type="text"
-              icon={<BugOutlined />}
-              onClick={() => handleViewVulnerabilities(record)}
-              disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDeleteClick(record)}
+              title="Remove Agent"
             />
-          </Tooltip>
-          <Tooltip title="Download Report">
-            <Button 
-              type="text"
-              icon={downloadLoading[record.name] ? <LoadingOutlined /> : <DownloadOutlined />}
-              onClick={() => handleDownloadReport(record)}
-              disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
-              loading={downloadLoading[record.name]}
-            />
-          </Tooltip>
-          {getScanActionButton(record)}
-          <Button
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDeleteClick(record)}
-            title="Remove Agent"
-          />
-        </Space>
-      ),
+          </Space>
+        );
+      },
     },
   ];
   return (

@@ -600,7 +600,7 @@ class NessusService {
 
   async stopInternalScan(scanId) {
     try {
-      const response = await axios.post(`${API_URL}/internal-scan/stop/${scanId}`);
+      const response = await axios.post(`${API_URL}/scan/stop/${scanId}`);
       return response.data;
     } catch (error) {
       console.error('Error stopping internal scan:', error);

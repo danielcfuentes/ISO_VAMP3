@@ -1303,6 +1303,23 @@ def get_internal_vulnerability_plugin_details(scan_id, host_id, plugin_id):
         logging.error(f"Error getting plugin details: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/internal-scan/stop/<int:scan_id>', methods=['POST'])
+@login_required
+def stop_internal_scan(scan_id):
+    """
+    Stop a running internal scan
+    """
+    try:
+        response = requests.post(
+            f'{NESSUS_URL}/scans/{scan_id}/stop',
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        return jsonify({'message': 'Internal scan stopped successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/internal-scan/report/<server_name>', methods=['GET'])
 @login_required
 def download_internal_scan_report(server_name):
