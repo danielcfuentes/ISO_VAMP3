@@ -38,10 +38,22 @@ const ExceptionRequests = () => {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [username, setUsername] = useState('');
   
-  // Fetch exception requests from the API
+  // Get user info and fetch exception requests from the API
   useEffect(() => {
-    fetchExceptionRequests();
+    // Check if user is logged in and get the username
+    const checkSession = async () => {
+      try {
+        // You could make an API call here to get session info if needed
+        // For now, we'll just show the requests
+        fetchExceptionRequests();
+      } catch (error) {
+        console.error('Error checking session:', error);
+      }
+    };
+    
+    checkSession();
   }, []);
   
   const fetchExceptionRequests = async () => {
@@ -51,6 +63,12 @@ const ExceptionRequests = () => {
         withCredentials: true
       });
       setRequests(response.data);
+      
+      // If we have any requests, we can get the username from the first one
+      if (response.data && response.data.length > 0) {
+        setUsername(response.data[0].requestedBy);
+      }
+      
       setLoading(false);
     } catch (error) {
       console.error('Error fetching exception requests:', error);
@@ -70,60 +88,36 @@ const ExceptionRequests = () => {
     setModalVisible(true);
   };
   
-  const handleSubmit = async () => {
-    // Validate form data
-    if (!formData.serverName) {
-      setError("Server name is required");
-      return;
-    }
-
-    if (formData.vulnerabilities.length === 0) {
-      setError("At least one vulnerability must be selected");
-      return;
-    }
-
-    if (!formData.justification) {
-      setError("Justification is required");
-      return;
-    }
-
-    if (!formData.mitigation) {
-      setError("Mitigation is required");
-      return;
-    }
-
-    if (!formData.expirationDate) {
-      setError("Expiration date is required");
-      return;
-    }
-
-    setLoading(true);
+  const handleSubmit = async (values) => {
+    setSubmitting(true);
     setError(null);
     
-    // Format the date as ISO string
-    const formattedData = {
-      ...formData,
-      expirationDate: formData.expirationDate.format('YYYY-MM-DD')
-    };
-    
-    console.log("Submitting data:", formattedData);
+    try {
+      // Format the vulnerabilities data
+      const formattedData = {
+        ...values,
+        vulnerabilities: values.vulnerabilities.split(',').map(v => v.trim()),
+        expirationDate: values.expirationDate.format('YYYY-MM-DD')
+      };
+      
+      console.log("Submitting data:", formattedData);
 
-    // Call the API to create the exception request
-    axios.post(`${API_URL}/exception-requests`, formattedData, {
-      withCredentials: true
-    })
-      .then(response => {
-        setLoading(false);
-        onClose();
-        if (onSuccess) {
-          onSuccess(response.data);
-        }
-      })
-      .catch(err => {
-        console.error("Error submitting exception request:", err);
-        setLoading(false);
-        setError(err.response?.data?.error || "Failed to submit request. Please try again.");
+      // Call the API to create the exception request
+      const response = await axios.post(`${API_URL}/exception-requests`, formattedData, {
+        withCredentials: true
       });
+      
+      // Success - refresh the list and close the modal
+      message.success('Exception request submitted successfully');
+      fetchExceptionRequests();
+      setModalVisible(false);
+      form.resetFields();
+    } catch (err) {
+      console.error("Error submitting exception request:", err);
+      setError(err.response?.data?.error || "Failed to submit request. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
   
   const getStatusTag = (status) => {
@@ -226,7 +220,7 @@ const ExceptionRequests = () => {
           <Title level={4}>
             <Space>
               <FileTextOutlined />
-              Exception Requests
+              {username ? `${username}'s Exception Requests` : 'My Exception Requests'}
             </Space>
           </Title>
           

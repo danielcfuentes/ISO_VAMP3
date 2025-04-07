@@ -1534,11 +1534,16 @@ def create_exception_request():
 @login_required
 def get_exception_requests():
     """
-    Get all exception requests
+    Get exception requests for the current user
     """
     try:
-        # Execute the script to get all exception requests
-        result = execute_prisma_script('get-all-exceptions')
+        # Get the username from the session
+        username = session.get('username', 'unknown')
+        
+        logging.info(f"Fetching exception requests for user {username}")
+        
+        # Always use the user-specific script
+        result = execute_prisma_script('get-user-exceptions', {'username': username})
         
         if 'error' in result:
             return jsonify({'error': result['error']}), 500
@@ -1546,6 +1551,28 @@ def get_exception_requests():
         return jsonify(result), 200
     except Exception as e:
         logging.error(f"Error getting exception requests: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/exception-requests', methods=['GET'])
+@login_required
+def get_all_exception_requests():
+    """
+    Get all exception requests (admin only)
+    """
+    try:
+        # Check if user is admin
+        if not session.get('is_admin', False):
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Execute the script to get all requests
+        result = execute_prisma_script('get-all-exceptions')
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 500
+            
+        return jsonify(result), 200
+    except Exception as e:
+        logging.error(f"Error getting all exception requests: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # =============================================================================

@@ -20,7 +20,7 @@ const AdminDashboard = () => {
   const fetchExceptionRequests = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/exception-requests`, {
+      const response = await axios.get(`${API_URL}/admin/exception-requests`, {
         withCredentials: true
       });
       setExceptionRequests(response.data);
