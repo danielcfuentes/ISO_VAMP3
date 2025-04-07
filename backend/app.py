@@ -1575,6 +1575,53 @@ def get_all_exception_requests():
         logging.error(f"Error getting all exception requests: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/exception-requests/<int:request_id>', methods=['PUT'])
+@login_required
+def update_exception_request(request_id):
+    """
+    Update an exception request status (admin only)
+    """
+    try:
+        # Check if user is admin
+        if not session.get('is_admin', False):
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        status = data.get('status')
+        
+        if not status or status not in ['approved', 'declined']:
+            return jsonify({'error': 'Invalid status'}), 400
+            
+        # Format the data for the database script
+        update_data = {
+            'id': request_id,
+            'status': status
+        }
+        
+        # Add decline reason if status is declined
+        if status == 'declined':
+            decline_reason = data.get('declineReason')
+            if not decline_reason:
+                return jsonify({'error': 'Decline reason is required when declining a request'}), 400
+            update_data['declineReason'] = decline_reason
+        
+        logging.info(f"Updating exception request {request_id} with data: {update_data}")
+        
+        # Execute the script to update the exception request
+        result = execute_prisma_script('update-exception', update_data)
+        
+        if isinstance(result, dict) and 'error' in result:
+            logging.error(f"Error updating exception request: {result['error']}")
+            return jsonify({'error': result['error']}), 500
+            
+        return jsonify(result), 200
+    except Exception as e:
+        logging.error(f"Error updating exception request: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 # =============================================================================
 # MAIN APPLICATION ENTRY POINT
 # =============================================================================

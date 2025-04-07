@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Card, Typography, Space, Table, Tag, Button, Modal, message } from 'antd';
+import { Card, Typography, Space, Table, Tag, Button, Modal, message, Input } from 'antd';
 import { DashboardOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
 
 const { Title, Paragraph, Text } = Typography;
+const { TextArea } = Input;
 const API_URL = 'http://localhost:5000/api';
 
 const AdminDashboard = () => {
@@ -12,6 +13,9 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [declineReason, setDeclineReason] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const [showDeclineForm, setShowDeclineForm] = useState(false);
 
   useEffect(() => {
     fetchExceptionRequests();
@@ -35,13 +39,63 @@ const AdminDashboard = () => {
   const handleViewDetails = (request) => {
     setSelectedRequest(request);
     setModalVisible(true);
+    setDeclineReason('');
+    setShowDeclineForm(false);
+  };
+
+  const handleApprove = async () => {
+    try {
+      setUpdating(true);
+      await axios.put(
+        `${API_URL}/exception-requests/${selectedRequest.id}`,
+        { status: 'approved' },
+        { withCredentials: true }
+      );
+      message.success('Exception request approved');
+      setModalVisible(false);
+      fetchExceptionRequests();
+    } catch (error) {
+      console.error('Error approving request:', error);
+      message.error('Failed to approve request');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDecline = async () => {
+    if (!showDeclineForm) {
+      setShowDeclineForm(true);
+      return;
+    }
+
+    if (!declineReason) {
+      message.error('Please provide a reason for declining');
+      return;
+    }
+
+    try {
+      setUpdating(true);
+      await axios.put(
+        `${API_URL}/exception-requests/${selectedRequest.id}`,
+        { status: 'declined', declineReason },
+        { withCredentials: true }
+      );
+      message.success('Exception request declined');
+      setModalVisible(false);
+      fetchExceptionRequests();
+    } catch (error) {
+      console.error('Error declining request:', error);
+      message.error('Failed to decline request');
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const getStatusTag = (status) => {
     const statusMappings = {
       'approved': { color: 'success', icon: <CheckCircleOutlined />, text: 'Approved' },
       'pending': { color: 'processing', icon: <ClockCircleOutlined />, text: 'Pending' },
-      'rejected': { color: 'error', icon: <CloseCircleOutlined />, text: 'Rejected' }
+      'declined': { color: 'error', icon: <CloseCircleOutlined />, text: 'Declined' }
     };
     
     const mapping = statusMappings[status] || { color: 'default', text: status };
@@ -127,11 +181,7 @@ const AdminDashboard = () => {
         title="Exception Request Details"
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
-        footer={
-          <Button key="close" onClick={() => setModalVisible(false)}>
-            Close
-          </Button>
-        }
+        footer={null}
         width={700}
       >
         {selectedRequest && (
@@ -179,6 +229,44 @@ const AdminDashboard = () => {
               <Text strong>Mitigation Measures: </Text>
               <p>{selectedRequest.mitigation}</p>
             </div>
+
+            {selectedRequest.status === 'pending' && (
+              <div className="mt-6">
+                {showDeclineForm && (
+                  <div className="mb-4">
+                    <TextArea
+                      rows={4}
+                      placeholder="Reason for declining (required)"
+                      value={declineReason}
+                      onChange={(e) => setDeclineReason(e.target.value)}
+                    />
+                  </div>
+                )}
+                <div className="flex justify-end space-x-4">
+                  <Button 
+                    type="primary" 
+                    onClick={handleApprove}
+                    loading={updating}
+                  >
+                    Approve
+                  </Button>
+                  <Button 
+                    danger 
+                    onClick={handleDecline}
+                    loading={updating}
+                  >
+                    {showDeclineForm ? 'Submit Decline' : 'Decline'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {selectedRequest.status === 'declined' && selectedRequest.declineReason && (
+              <div className="mt-4">
+                <Text strong>Decline Reason: </Text>
+                <p className="text-red-500">{selectedRequest.declineReason}</p>
+              </div>
+            )}
           </div>
         )}
       </Modal>

@@ -22,7 +22,6 @@ import {
   ClockCircleOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
-import moment from 'moment';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -62,6 +61,7 @@ const ExceptionRequests = () => {
       const response = await axios.get(`${API_URL}/exception-requests`, {
         withCredentials: true
       });
+      console.log('Fetched exception requests:', response.data);
       setRequests(response.data);
       
       // If we have any requests, we can get the username from the first one
@@ -103,7 +103,7 @@ const ExceptionRequests = () => {
       console.log("Submitting data:", formattedData);
 
       // Call the API to create the exception request
-      const response = await axios.post(`${API_URL}/exception-requests`, formattedData, {
+      await axios.post(`${API_URL}/exception-requests`, formattedData, {
         withCredentials: true
       });
       
@@ -120,19 +120,26 @@ const ExceptionRequests = () => {
     }
   };
   
-  const getStatusTag = (status) => {
+  const getStatusTag = (status, declineReason) => {
     const statusMappings = {
       'approved': { color: 'success', icon: <CheckCircleOutlined />, text: 'Approved' },
       'pending': { color: 'processing', icon: <ClockCircleOutlined />, text: 'Pending' },
-      'rejected': { color: 'error', icon: <CloseCircleOutlined />, text: 'Rejected' }
+      'declined': { color: 'error', icon: <CloseCircleOutlined />, text: 'Declined' }
     };
     
     const mapping = statusMappings[status] || { color: 'default', text: status };
     
     return (
-      <Tag icon={mapping.icon} color={mapping.color}>
-        {mapping.text}
-      </Tag>
+      <div>
+        <Tag icon={mapping.icon} color={mapping.color}>
+          {mapping.text}
+        </Tag>
+        {status === 'declined' && declineReason && (
+          <div className="mt-2 text-red-500">
+            <Text type="secondary">Reason: {declineReason}</Text>
+          </div>
+        )}
+      </div>
     );
   };
   
@@ -147,11 +154,11 @@ const ExceptionRequests = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: status => getStatusTag(status),
+      render: (status, record) => getStatusTag(status, record.declineReason),
       filters: [
         { text: 'Approved', value: 'approved' },
         { text: 'Pending', value: 'pending' },
-        { text: 'Rejected', value: 'rejected' }
+        { text: 'Declined', value: 'declined' }
       ],
       onFilter: (value, record) => record.status === value
     },
@@ -246,12 +253,7 @@ const ExceptionRequests = () => {
           className="mb-4"
         />
         
-        <Alert
-          message={error}
-          type="error"
-          showIcon
-          className="mb-4"
-        />
+
         
         <Table
           columns={columns}
@@ -263,12 +265,18 @@ const ExceptionRequests = () => {
               <div className="p-4">
                 <div className="mb-3">
                   <Text strong>Justification: </Text>
-                  <p>{record.justification}</p>
+                  <div>{record.justification}</div>
                 </div>
-                <div>
+                <div className="mb-3">
                   <Text strong>Mitigation Measures: </Text>
-                  <p>{record.mitigation}</p>
+                  <div>{record.mitigation}</div>
                 </div>
+                {record.status === 'declined' && record.declineReason && (
+                  <div className="mb-3">
+                    <Text strong>Decline Reason: </Text>
+                    <div className="text-red-600">{record.declineReason}</div>
+                  </div>
+                )}
               </div>
             )
           }}
@@ -296,44 +304,44 @@ const ExceptionRequests = () => {
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <Text strong>Server Name:</Text>
-                <p>{selectedRequest.serverName}</p>
+                <div>{selectedRequest.serverName}</div>
               </div>
               <div>
                 <Text strong>Status:</Text>
-                <p>{getStatusTag(selectedRequest.status)}</p>
+                <div>{getStatusTag(selectedRequest.status, selectedRequest.declineReason)}</div>
               </div>
               <div>
                 <Text strong>Requested By:</Text>
-                <p>{selectedRequest.requestedBy}</p>
+                <div>{selectedRequest.requestedBy}</div>
               </div>
               <div>
                 <Text strong>Request Date:</Text>
-                <p>{selectedRequest.requestedDate}</p>
+                <div>{selectedRequest.requestedDate}</div>
               </div>
               <div>
                 <Text strong>Expiration Date:</Text>
-                <p>{selectedRequest.expirationDate || 'N/A'}</p>
+                <div>{selectedRequest.expirationDate || 'N/A'}</div>
               </div>
               <div>
                 <Text strong>Vulnerabilities:</Text>
-                <p>
+                <div>
                   {selectedRequest.vulnerabilities.map(vuln => (
                     <Tag key={vuln} color="orange" style={{ marginBottom: '4px' }}>
                       {vuln}
                     </Tag>
                   ))}
-                </p>
+                </div>
               </div>
             </div>
             
             <div className="mb-4">
               <Text strong>Justification:</Text>
-              <p>{selectedRequest.justification}</p>
+              <div>{selectedRequest.justification}</div>
             </div>
             
             <div>
               <Text strong>Mitigation Measures:</Text>
-              <p>{selectedRequest.mitigation}</p>
+              <div>{selectedRequest.mitigation}</div>
             </div>
           </div>
         ) : (
