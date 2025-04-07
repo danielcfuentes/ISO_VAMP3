@@ -17,9 +17,11 @@ import {
 } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 import ExceptionRequestFormModal from './ExceptionRequestFormModal';
+import axios from 'axios';
 
 const { Text, Title, Paragraph } = Typography;
 const { Panel } = Collapse;
+const API_URL = 'http://localhost:5000/api';
 
 const InternalScanVulDetailsModal = ({ 
   visible, 
@@ -412,18 +414,38 @@ const InternalScanVulDetailsModal = ({
     
     const vulnerabilities = [];
     vulnerabilityData.hosts.forEach(host => {
-      host.vulnerabilities.forEach(vuln => {
-        if (vuln.severity >= 2) { // Medium (2), High (3), or Critical (4)
-          vulnerabilities.push({
-            ...vuln,
-            host_id: host.id,
-            host_name: host.hostname || host.ip
-          });
-        }
-      });
+      if (host.vulnerabilities) {
+        host.vulnerabilities.forEach(vuln => {
+          if (vuln.severity >= 2) { // Medium (2), High (3), or Critical (4)
+            // Format the vulnerability with consistent properties
+            vulnerabilities.push({
+              id: vuln.plugin_id,
+              plugin_id: vuln.plugin_id,
+              name: vuln.plugin_name,
+              plugin_name: vuln.plugin_name,
+              severity: vuln.severity,
+              severity_name: getSeverityName(vuln.severity),
+              host_id: host.id,
+              host_name: host.hostname || host.ip
+            });
+          }
+        });
+      }
     });
     
     return vulnerabilities;
+  };
+  
+  // Helper function to convert numeric severity to text
+  const getSeverityName = (severity) => {
+    switch(Number(severity)) {
+      case 4: return 'Critical';
+      case 3: return 'High';
+      case 2: return 'Medium';
+      case 1: return 'Low';
+      case 0: return 'Info';
+      default: return 'Unknown';
+    }
   };
 
   return (
@@ -509,11 +531,32 @@ const InternalScanVulDetailsModal = ({
         serverName={scan?.name}
         vulnerabilities={getHighSeverityVulnerabilities()}
         onSubmit={async (values) => {
-          // Here you would submit the exception request
-          console.log("Submitting exception request:", values);
-          // TODO: Add actual API call
-          message.success(`Exception request submitted for ${scan?.name}`);
-          setExceptionModalVisible(false);
+          try {
+            // Get just the vulnerability names/IDs for the database
+            const vulnerabilityNames = values.vulnerabilities.map(v => 
+              typeof v === 'string' ? v : (v.name || v.plugin_name || `Vulnerability ID: ${v.id || v.plugin_id}`)
+            );
+            
+            // Format the data for the backend
+            const formData = {
+              serverName: values.serverName,
+              vulnerabilities: vulnerabilityNames,
+              justification: values.justification,
+              mitigation: values.mitigation,
+              expirationDate: values.expirationDate.format('YYYY-MM-DD')
+            };
+            
+            // Submit the exception request
+            await axios.post(`${API_URL}/exception-requests`, formData, {
+              withCredentials: true
+            });
+            
+            message.success(`Exception request submitted for ${scan?.name}`);
+            setExceptionModalVisible(false);
+          } catch (error) {
+            console.error('Error submitting exception request:', error);
+            message.error('Failed to submit exception request');
+          }
         }}
       />
     </Modal>

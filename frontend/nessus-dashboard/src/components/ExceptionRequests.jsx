@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Card, 
   Typography, 
@@ -8,7 +8,6 @@ import {
   Modal, 
   Form, 
   Input, 
-  Select, 
   DatePicker, 
   message, 
   Tag, 
@@ -18,18 +17,15 @@ import {
 import { 
   FileTextOutlined, 
   PlusOutlined, 
-  EditOutlined, 
-  DeleteOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
+import moment from 'moment';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
-const { Option } = Select;
-const { RangePicker } = DatePicker;
 
 const API_URL = 'http://localhost:5000/api';
 
@@ -41,56 +37,20 @@ const ExceptionRequests = () => {
   const [modalMode, setModalMode] = useState('create');
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
   
-  // Mock data for now since the backend API isn't implemented yet
+  // Fetch exception requests from the API
   useEffect(() => {
-    setRequests([
-      {
-        id: 1,
-        serverName: 'ISOSRVTS102',
-        status: 'approved',
-        requestedBy: 'jdoe',
-        requestedDate: '2025-02-15',
-        expirationDate: '2025-05-15',
-        justification: 'Server runs critical legacy application that cannot be patched without breaking functionality.',
-        vulnerabilities: ['CVE-2024-1234', 'CVE-2024-5678'],
-        mitigation: 'Server is isolated on a separate VLAN with restricted access.'
-      },
-      {
-        id: 2,
-        serverName: 'ISOSRVDB01',
-        status: 'pending',
-        requestedBy: 'msmith',
-        requestedDate: '2025-03-01',
-        expirationDate: '2025-06-01',
-        justification: 'Database server with vendor restrictions on updates until next maintenance window.',
-        vulnerabilities: ['CVE-2024-9876'],
-        mitigation: 'Additional monitoring and host-based firewall rules implemented.'
-      },
-      {
-        id: 3,
-        serverName: 'ISOSRVWEB03',
-        status: 'rejected',
-        requestedBy: 'tjohnson',
-        requestedDate: '2025-02-20',
-        expirationDate: null,
-        justification: 'Web server with custom application.',
-        vulnerabilities: ['CVE-2024-2468', 'CVE-2024-1357', 'CVE-2024-8765'],
-        mitigation: 'Proposed to implement WAF but rejected as insufficient.'
-      }
-    ]);
+    fetchExceptionRequests();
   }, []);
   
   const fetchExceptionRequests = async () => {
-    // This would be implemented when the backend API is ready
     setLoading(true);
     try {
-      // const response = await axios.get(`${API_URL}/exception-requests`, {
-      //   withCredentials: true
-      // });
-      // setRequests(response.data);
-      
-      // For now, we're using mock data that's loaded in the useEffect
+      const response = await axios.get(`${API_URL}/exception-requests`, {
+        withCredentials: true
+      });
+      setRequests(response.data);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching exception requests:', error);
@@ -103,92 +63,67 @@ const ExceptionRequests = () => {
     setModalMode(mode);
     setSelectedRequest(request);
     
-    if (mode === 'edit' && request) {
-      form.setFieldsValue({
-        serverName: request.serverName,
-        justification: request.justification,
-        vulnerabilities: request.vulnerabilities.join(', '),
-        mitigation: request.mitigation,
-        expirationDate: request.expirationDate ? moment(request.expirationDate) : null
-      });
-    } else {
+    if (mode === 'create') {
       form.resetFields();
     }
     
     setModalVisible(true);
   };
   
-  const handleSubmit = async (values) => {
-    setSubmitting(true);
+  const handleSubmit = async () => {
+    // Validate form data
+    if (!formData.serverName) {
+      setError("Server name is required");
+      return;
+    }
+
+    if (formData.vulnerabilities.length === 0) {
+      setError("At least one vulnerability must be selected");
+      return;
+    }
+
+    if (!formData.justification) {
+      setError("Justification is required");
+      return;
+    }
+
+    if (!formData.mitigation) {
+      setError("Mitigation is required");
+      return;
+    }
+
+    if (!formData.expirationDate) {
+      setError("Expiration date is required");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
     
-    try {
-      const formData = {
-        ...values,
-        vulnerabilities: values.vulnerabilities.split(',').map(v => v.trim())
-      };
-      
-      if (modalMode === 'create') {
-        // This would be implemented when the backend API is ready
-        // await axios.post(`${API_URL}/exception-requests`, formData, {
-        //   withCredentials: true
-        // });
-        
-        // Mock implementation
-        setRequests([
-          ...requests,
-          {
-            id: requests.length + 1,
-            ...formData,
-            status: 'pending',
-            requestedBy: 'currentUser', // This would come from the session
-            requestedDate: new Date().toISOString().split('T')[0]
-          }
-        ]);
-        
-        message.success('Exception request submitted successfully');
-      } else if (modalMode === 'edit') {
-        // This would be implemented when the backend API is ready
-        // await axios.put(`${API_URL}/exception-requests/${selectedRequest.id}`, formData, {
-        //   withCredentials: true
-        // });
-        
-        // Mock implementation
-        setRequests(
-          requests.map(req => 
-            req.id === selectedRequest.id 
-              ? { ...req, ...formData }
-              : req
-          )
-        );
-        
-        message.success('Exception request updated successfully');
-      }
-      
-      setModalVisible(false);
-      form.resetFields();
-    } catch (error) {
-      console.error('Error submitting exception request:', error);
-      message.error('Failed to submit exception request');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-  
-  const handleDelete = async (id) => {
-    try {
-      // This would be implemented when the backend API is ready
-      // await axios.delete(`${API_URL}/exception-requests/${id}`, {
-      //   withCredentials: true
-      // });
-      
-      // Mock implementation
-      setRequests(requests.filter(req => req.id !== id));
-      
-      message.success('Exception request deleted successfully');
-    } catch (error) {
-      console.error('Error deleting exception request:', error);
-      message.error('Failed to delete exception request');
-    }
+    // Format the date as ISO string
+    const formattedData = {
+      ...formData,
+      expirationDate: formData.expirationDate.format('YYYY-MM-DD')
+    };
+    
+    console.log("Submitting data:", formattedData);
+
+    // Call the API to create the exception request
+    axios.post(`${API_URL}/exception-requests`, formattedData, {
+      withCredentials: true
+    })
+      .then(response => {
+        setLoading(false);
+        onClose();
+        if (onSuccess) {
+          onSuccess(response.data);
+        }
+      })
+      .catch(err => {
+        console.error("Error submitting exception request:", err);
+        setLoading(false);
+        setError(err.response?.data?.error || "Failed to submit request. Please try again.");
+      });
   };
   
   const getStatusTag = (status) => {
@@ -274,32 +209,6 @@ const ExceptionRequests = () => {
               onClick={() => handleOpenModal('view', record)} 
             />
           </Tooltip>
-          
-          {record.status === 'pending' && (
-            <>
-              <Tooltip title="Edit Request">
-                <Button 
-                  type="text" 
-                  icon={<EditOutlined />} 
-                  onClick={() => handleOpenModal('edit', record)} 
-                />
-              </Tooltip>
-              <Tooltip title="Delete Request">
-                <Button 
-                  type="text" 
-                  danger 
-                  icon={<DeleteOutlined />} 
-                  onClick={() => Modal.confirm({
-                    title: 'Delete Exception Request',
-                    content: `Are you sure you want to delete the exception request for ${record.serverName}?`,
-                    okText: 'Delete',
-                    okButtonProps: { danger: true },
-                    onOk: () => handleDelete(record.id)
-                  })} 
-                />
-              </Tooltip>
-            </>
-          )}
         </Space>
       )
     }
@@ -307,7 +216,6 @@ const ExceptionRequests = () => {
   
   const modalTitle = {
     'create': 'Create Exception Request',
-    'edit': 'Edit Exception Request',
     'view': 'Exception Request Details'
   };
   
@@ -340,6 +248,13 @@ const ExceptionRequests = () => {
           message="About Exception Requests"
           description="If a vulnerability cannot be remediated due to business or technical constraints, you can request an exception. All exceptions must be thoroughly justified, include appropriate compensating controls, and are subject to security team approval."
           type="info"
+          showIcon
+          className="mb-4"
+        />
+        
+        <Alert
+          message={error}
+          type="error"
           showIcon
           className="mb-4"
         />
@@ -497,7 +412,7 @@ const ExceptionRequests = () => {
             
             <Form.Item>
               <Button type="primary" htmlType="submit" loading={submitting} block>
-                {modalMode === 'create' ? 'Submit Request' : 'Update Request'}
+                Submit Request
               </Button>
             </Form.Item>
           </Form>

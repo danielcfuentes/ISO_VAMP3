@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Typography, Divider, Table, Tag, Space, Alert, Tabs, Collapse, Descriptions, Badge, Progress, Spin } from 'antd';
+import { Modal, Button, Typography, Divider, Table, Tag, Space, Alert, Tabs, Collapse, Descriptions, Badge, Progress, Spin, message } from 'antd';
 import { 
   InfoCircleOutlined, 
   DownloadOutlined, 
@@ -14,9 +14,14 @@ import {
 } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 import ExceptionRequestFormModal from './ExceptionRequestFormModal';
+import axios from 'axios';
 
 const { Text, Title, Paragraph } = Typography;
+const { TabPane } = Tabs;
 const { Panel } = Collapse;
+
+// API endpoint URL
+const API_URL = window.API_URL || 'http://localhost:5000/api';
 
 const VulDetailsModal = ({ 
   visible, 
@@ -498,10 +503,48 @@ const VulDetailsModal = ({
         serverName={scan?.name}
         vulnerabilities={getHighSeverityVulnerabilities()}
         onSubmit={async (values) => {
-          // Here you would submit the exception request
-          console.log("Submitting exception request:", values);
-          // TODO: Add actual API call
-          setExceptionModalVisible(false);
+          try {
+            // Ensure we have a proper date format
+            let expirationDate = values.expirationDate;
+            if (typeof expirationDate === 'object' && expirationDate !== null) {
+              // It's likely a complex object
+              if (typeof expirationDate.format === 'function') {
+                expirationDate = expirationDate.format('YYYY-MM-DD');
+              } else if (expirationDate.$d) {
+                const date = new Date(expirationDate.$d);
+                expirationDate = date.toISOString().split('T')[0]; // YYYY-MM-DD
+              } else if (expirationDate.d) {
+                const date = new Date(expirationDate.d);
+                expirationDate = date.toISOString().split('T')[0]; // YYYY-MM-DD
+              }
+            }
+            
+            // Create the final data to send
+            const formData = {
+              serverName: values.serverName,
+              vulnerabilities: values.vulnerabilities, 
+              justification: values.justification,
+              mitigation: values.mitigation,
+              expirationDate: expirationDate
+            };
+            
+            console.log("Submitting exception request:", formData);
+            
+            // Submit the exception request to the backend
+            const response = await axios.post(`${API_URL}/exception-requests`, formData, {
+              withCredentials: true
+            });
+            
+            if (response.status === 201) {
+              message.success('Exception request submitted successfully');
+              setExceptionModalVisible(false);
+            } else {
+              throw new Error('Failed to submit request');
+            }
+          } catch (error) {
+            console.error('Error submitting exception request:', error);
+            message.error('Failed to submit exception request: ' + (error.response?.data?.error || error.message));
+          }
         }}
       />
     </Modal>

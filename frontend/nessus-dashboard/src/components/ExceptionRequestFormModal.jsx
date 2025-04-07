@@ -35,18 +35,66 @@ const ExceptionRequestFormModal = ({
     try {
       setSubmitting(true);
       
+      // Handle date formatting - fix for dayjs/moment objects
+      let formattedDate = null;
+      if (values.expirationDate) {
+        if (typeof values.expirationDate.format === 'function') {
+          // It's a dayjs/moment object
+          formattedDate = values.expirationDate.format('YYYY-MM-DD');
+        } else if (values.expirationDate instanceof Date) {
+          // It's a Date object
+          const year = values.expirationDate.getFullYear();
+          const month = String(values.expirationDate.getMonth() + 1).padStart(2, '0');
+          const day = String(values.expirationDate.getDate()).padStart(2, '0');
+          formattedDate = `${year}-${month}-${day}`;
+        } else if (typeof values.expirationDate === 'string') {
+          // It's already a string
+          formattedDate = values.expirationDate;
+        } else if (typeof values.expirationDate === 'object') {
+          // Try to extract from complex object
+          if (values.expirationDate.$d) {
+            const date = new Date(values.expirationDate.$d);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            formattedDate = `${year}-${month}-${day}`;
+          } else if (values.expirationDate.d) {
+            // Parse from string if available
+            const date = new Date(values.expirationDate.d);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            formattedDate = `${year}-${month}-${day}`;
+          }
+        }
+      }
+      
       // Format the vulnerabilities data
       const formattedData = {
         ...values,
+        expirationDate: formattedDate || "2025-12-31", // Use default if all else fails
         vulnerabilities: values.vulnerabilities.map(vulnId => {
-          const vuln = vulnerabilities.find(v => v.id === vulnId);
+          const vuln = vulnerabilities.find(v => v.id === vulnId || v.plugin_id === vulnId);
+          
+          // Guard against undefined vulnerability objects
+          if (!vuln) {
+            // Return a simplified vulnerability object if the complete one isn't found
+            return {
+              id: vulnId,
+              name: `Vulnerability ID: ${vulnId}`,
+              severity: 'Unknown'
+            };
+          }
+          
           return {
-            id: vuln.id,
-            name: vuln.name,
-            severity: vuln.severity
+            id: vuln.id || vuln.plugin_id,
+            name: vuln.name || vuln.plugin_name,
+            severity: vuln.severity || vuln.severity_name
           };
         })
       };
+      
+      console.log("Submitting formatted data:", JSON.stringify(formattedData));
       
       // Submit the form
       await onSubmit(formattedData);

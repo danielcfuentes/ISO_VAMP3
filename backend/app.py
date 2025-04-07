@@ -13,6 +13,8 @@ import json
 import io
 from functools import wraps
 from datetime import datetime
+import os
+import subprocess
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -47,6 +49,47 @@ REPORT_TEMPLATE_ID = '2493'
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# =============================================================================
+# DATABASE INTEGRATION 
+# =============================================================================
+
+# Function to execute Node.js scripts that interact with Prisma
+def execute_prisma_script(script_type, data=None):
+    """
+    Execute a Node.js script to interact with Prisma
+    
+    Args:
+        script_type (str): Type of script to execute (e.g., 'create', 'get-all')
+        data (dict, optional): Data to pass to the script. Defaults to None.
+    
+    Returns:
+        dict: Response from the script
+    """
+    try:
+        if data:
+            input_data = json.dumps(data)
+            result = subprocess.run(
+                ['node', f'database/{script_type}.js'], 
+                input=input_data, 
+                text=True, 
+                capture_output=True
+            )
+        else:
+            result = subprocess.run(
+                ['node', f'database/{script_type}.js'], 
+                text=True, 
+                capture_output=True
+            )
+        
+        if result.returncode != 0:
+            logging.error(f"Database script error: {result.stderr}")
+            return {"error": "Database operation failed"}
+        
+        return json.loads(result.stdout)
+    except Exception as e:
+        logging.error(f"Error executing database script: {str(e)}")
+        return {"error": str(e)}
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -1402,6 +1445,107 @@ def download_internal_scan_report(server_name):
 
     except Exception as e:
         logging.error(f"Error downloading report: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# EXCEPTION REQUEST ROUTES
+# =============================================================================
+
+@app.route('/api/exception-requests', methods=['POST'])
+@login_required
+def create_exception_request():
+    """
+    Create a new exception request in the database
+    """
+    try:
+        data = request.json
+        logging.info(f"Received raw exception request data: {data}")
+        
+        # Handle malformed data
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        # Check required fields
+        if not data.get('serverName'):
+            return jsonify({'error': 'Server name is required'}), 400
+            
+        # Extract date from potentially complex object
+        expiration_date = data.get('expirationDate')
+        if isinstance(expiration_date, dict) and 'd' in expiration_date:
+            # Handle dayjs object format
+            date_str = expiration_date.get('d')
+            if date_str:
+                # Try to extract date from string like "Wed Apr 23 2025 00:00:00 GMT-0600"
+                try:
+                    from datetime import datetime
+                    # Extract just the date portion "Apr 23 2025"
+                    date_parts = date_str.split(' ')
+                    if len(date_parts) >= 4:
+                        month = date_parts[1]
+                        day = date_parts[2]
+                        year = date_parts[3]
+                        expiration_date = f"{year}-{month}-{day}"
+                except Exception as date_error:
+                    logging.error(f"Error parsing date object: {date_error}")
+                    # Fallback to using a default date
+                    expiration_date = "2025-12-31"
+            else:
+                expiration_date = "2025-12-31"  # Default if we can't parse
+        
+        # Process vulnerabilities - handle both string arrays and object arrays
+        vulnerabilities = data.get('vulnerabilities', [])
+        processed_vulnerabilities = []
+        
+        logging.info(f"Processing vulnerabilities: {vulnerabilities}")
+        
+        for vuln in vulnerabilities:
+            if isinstance(vuln, str):
+                processed_vulnerabilities.append(vuln)
+            elif isinstance(vuln, dict):
+                # If it's an object, extract the name or fall back to ID
+                name = vuln.get('name') or vuln.get('plugin_name') or f"Vulnerability ID: {vuln.get('id') or vuln.get('plugin_id')}"
+                processed_vulnerabilities.append(name)
+        
+        # Format the data for the database
+        exception_data = {
+            'serverName': data.get('serverName'),
+            'vulnerabilities': processed_vulnerabilities,
+            'justification': data.get('justification') or "No justification provided",
+            'mitigation': data.get('mitigation') or "No mitigation provided",
+            'expirationDate': expiration_date,
+            'requestedBy': session.get('username', 'unknown')
+        }
+        
+        logging.info(f"Creating exception request with formatted data: {exception_data}")
+        
+        # Execute the script to create the exception request
+        result = execute_prisma_script('create-exception', exception_data)
+        
+        if 'error' in result:
+            logging.error(f"Error in database script: {result['error']}")
+            return jsonify({'error': result['error']}), 500
+            
+        return jsonify(result), 201
+    except Exception as e:
+        logging.error(f"Error creating exception request: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/exception-requests', methods=['GET'])
+@login_required
+def get_exception_requests():
+    """
+    Get all exception requests
+    """
+    try:
+        # Execute the script to get all exception requests
+        result = execute_prisma_script('get-all-exceptions')
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 500
+            
+        return jsonify(result), 200
+    except Exception as e:
+        logging.error(f"Error getting exception requests: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # =============================================================================
