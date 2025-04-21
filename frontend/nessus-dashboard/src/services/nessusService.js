@@ -598,6 +598,19 @@ class NessusService {
     }
   }
 
+  async getScanHistory(serverName) {
+    try {
+      const response = await axios.get(
+        `${API_URL}/internal-scan/history/${serverName}`,
+        { withCredentials: true }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching scan history:', error);
+      throw new Error(error.response?.data?.error || 'Failed to fetch scan history');
+    }
+  }
+
   async stopInternalScan(scanId) {
     try {
       const response = await axios.post(`${API_URL}/scan/stop/${scanId}`);

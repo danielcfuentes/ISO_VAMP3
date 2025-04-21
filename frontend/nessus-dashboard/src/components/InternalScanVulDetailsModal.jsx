@@ -13,10 +13,12 @@ import {
   WarningOutlined,
   BugOutlined,
   BarChartOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  HistoryOutlined
 } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 import ExceptionRequestFormModal from './ExceptionRequestFormModal';
+import ScanHistoryTab from './ScanHistoryTab';
 import axios from 'axios';
 
 const { Text, Title, Paragraph } = Typography;
@@ -36,6 +38,11 @@ const InternalScanVulDetailsModal = ({
   const [expandedRows, setExpandedRows] = useState({});
   const [pluginDetails, setPluginDetails] = useState({});
   const [exceptionModalVisible, setExceptionModalVisible] = useState(false);
+
+  // Add debug logging for scan prop
+  useEffect(() => {
+    console.log('InternalScanVulDetailsModal scan prop updated:', scan);
+  }, [scan]);
 
   // Fetch vulnerability data when scan is selected and modal is opened
   useEffect(() => {
@@ -497,7 +504,10 @@ const InternalScanVulDetailsModal = ({
           
           <Tabs 
             activeKey={activeTabKey} 
-            onChange={setActiveTabKey}
+            onChange={(key) => {
+              console.log('Tab changed to:', key);
+              setActiveTabKey(key);
+            }}
             items={[
               {
                 key: "summary",
@@ -518,6 +528,21 @@ const InternalScanVulDetailsModal = ({
                   </span>
                 ),
                 children: renderVulnerabilityDetails()
+              },
+              {
+                key: "history",
+                label: (
+                  <span>
+                    <HistoryOutlined />
+                    Scan History
+                  </span>
+                ),
+                children: (
+                  <>
+                    {console.log('Rendering ScanHistoryTab with serverName:', scan?.name)}
+                    <ScanHistoryTab serverName={scan?.name} />
+                  </>
+                )
               }
             ]}
           />
