@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Layout, Space, Tag, Typography, Card, message, Tooltip, Tabs } from 'antd';
-import { PlayCircleOutlined, DownloadOutlined, DeleteOutlined, BugOutlined, StopOutlined } from '@ant-design/icons';
+import { Table, Button, Layout, Space, Tag, Typography, Card, message, Tooltip, Tabs, Input } from 'antd';
+import { PlayCircleOutlined, DownloadOutlined, DeleteOutlined, BugOutlined, StopOutlined, CopyOutlined } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 import InternalScanVulDetailsModal from './InternalScanVulDetailsModal';
@@ -22,6 +22,8 @@ const Dashboard = () => {
   const [vulModalVisible, setVulModalVisible] = useState(false);
   const [selectedScanForVul, setSelectedScanForVul] = useState(null);
   const [activeTab, setActiveTab] = useState('internal');
+  const [copySuccess, setCopySuccess] = useState(false);
+  const username = localStorage.getItem('username') || 'HOSTNAME';
 
   // Fetch initial scan states when component mounts
   useEffect(() => {
@@ -625,44 +627,74 @@ const Dashboard = () => {
     ];
   };
 
+  const handleCopyKey = () => {
+    const linkingKey = `/opt/nessus_agent/sbin/nessuscli agent link --groups="${username}" --key=9b27d71431466e0690e093c449ec5f803a7eb85a0c99de7ef448da8682d2b6c4 --host=isosrvutn00.utep.edu --port=8834`;
+    navigator.clipboard.writeText(linkingKey);
+    setCopySuccess(true);
+    message.success('Linking key copied to clipboard!');
+    setTimeout(() => setCopySuccess(false), 2000);
+  };
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ background: '#041E42', padding: '0 16px', display: 'flex', alignItems: 'center' }}>
-        <Title level={2} style={{ margin: '16px 0', color: 'white' }}>Vulnerability Management Program (VaMP)</Title>
+      <Header style={{ background: '#fff', padding: '0 24px' }}>
+        <Title level={2} style={{ margin: '16px 0' }}>Nessus Dashboard</Title>
       </Header>
       <Content style={{ padding: '24px' }}>
-        <Card>
-          <Tabs 
-            activeKey={activeTab} 
-            onChange={setActiveTab}
-            type="card"
-            style={{ 
-              '& .ant-tabs-tab.ant-tabs-tab-active': { 
-                backgroundColor: '#FF7300',
-                borderColor: '#FF7300'
-              }
-            }}
-          >
-            <TabPane tab="Internal Scans" key="internal">
-              <Table
-                columns={getColumns()}
-                dataSource={servers}
-                loading={loading}
-                pagination={{ pageSize: 10 }}
-                rowKey="key"
-              />
-            </TabPane>
-            <TabPane tab="External Scans" key="external">
-              <Table
-                columns={getExternalColumns()}
-                dataSource={servers}
-                loading={loading}
-                pagination={{ pageSize: 10 }}
-                rowKey="key"
-              />
-            </TabPane>
-          </Tabs>
+        <Card 
+          title="Nessus Agent Linking Key" 
+          style={{ marginBottom: '24px' }}
+          extra={
+            <Button 
+              icon={<CopyOutlined />} 
+              onClick={handleCopyKey}
+              type={copySuccess ? 'primary' : 'default'}
+            >
+              {copySuccess ? 'Copied!' : 'Copy'}
+            </Button>
+          }
+        >
+          <Input.TextArea
+            value={`/opt/nessus_agent/sbin/nessuscli agent link --groups="${username}" --key=9b27d71431466e0690e093c449ec5f803a7eb85a0c99de7ef448da8682d2b6c4 --host=isosrvutn00.utep.edu --port=8834`}
+            readOnly
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            style={{ fontFamily: 'monospace' }}
+          />
+          <Typography.Text type="secondary" style={{ display: 'block', marginTop: '8px' }}>
+            Your username is automatically included in the linking key
+          </Typography.Text>
         </Card>
+
+        <Tabs 
+          activeKey={activeTab} 
+          onChange={setActiveTab}
+          type="card"
+          style={{ 
+            '& .ant-tabs-tab.ant-tabs-tab-active': { 
+              backgroundColor: '#FF7300',
+              borderColor: '#FF7300'
+            }
+          }}
+        >
+          <TabPane tab="Internal Scans" key="internal">
+            <Table
+              columns={getColumns()}
+              dataSource={servers}
+              loading={loading}
+              pagination={{ pageSize: 10 }}
+              rowKey="key"
+            />
+          </TabPane>
+          <TabPane tab="External Scans" key="external">
+            <Table
+              columns={getExternalColumns()}
+              dataSource={servers}
+              loading={loading}
+              pagination={{ pageSize: 10 }}
+              rowKey="key"
+            />
+          </TabPane>
+        </Tabs>
 
         <DeleteConfirmationModal
           visible={deleteModalVisible}

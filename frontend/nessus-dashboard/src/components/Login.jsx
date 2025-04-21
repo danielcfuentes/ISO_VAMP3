@@ -21,6 +21,7 @@ const Login = ({ onLoginSuccess }) => {
     try {
       setLoading(true);
       const result = await nessusService.login(values.username, values.password);
+      localStorage.setItem('username', values.username);
       message.success({
         content: 'Login successful',
         icon: <CheckCircleFilled style={{ color: '#52c41a' }} />,
