@@ -17,8 +17,12 @@ const Dashboard = () => {
   const [scanStates, setScanStates] = useState({});
   const [statusCheckIntervals, setStatusCheckIntervals] = useState({});
   const [downloadLoading, setDownloadLoading] = useState({});
-  const [internalVulModalVisible, setInternalVulModalVisible] = useState(false);
+  const [vulModalVisible, setVulModalVisible] = useState(false);
   const [selectedScanForVul, setSelectedScanForVul] = useState(null);
+  const [isExternalScan, setIsExternalScan] = useState(false);
+  const [externalScanStates, setExternalScanStates] = useState({});
+  const [externalStatusCheckIntervals, setExternalStatusCheckIntervals] = useState({});
+  const [externalDownloadLoading, setExternalDownloadLoading] = useState({});
 
     // Fetch initial scan states when component mounts
     useEffect(() => {
@@ -178,11 +182,11 @@ const Dashboard = () => {
     }
   };
 
-  const handleViewVulnerabilities = (server) => {
+  const handleViewVulnerabilities = (server, isExternal = false) => {
     // Check if there's a completed scan for this server
-    const scanState = scanStates[server.name];
+    const scanState = isExternal ? externalScanStates[server.name] : scanStates[server.name];
     if (!scanState || scanState.status !== 'completed') {
-      message.warning('No completed scan available to view');
+      message.warning(`No completed ${isExternal ? 'external' : ''} scan available to view`);
       return;
     }
     
@@ -194,22 +198,29 @@ const Dashboard = () => {
       start_time: scanState.startTime,
       end_time: scanState.endTime
     });
-    setInternalVulModalVisible(true);
+    setIsExternalScan(isExternal);
+    setVulModalVisible(true);
   };
 
-  const handleDownloadReport = async (server) => {
+  const handleDownloadReport = async (server, isExternal = false) => {
     try {
-      setDownloadLoading(prev => ({ ...prev, [server.name]: true }));
+      const loadingState = isExternal ? externalDownloadLoading : downloadLoading;
+      const setLoadingState = isExternal ? setExternalDownloadLoading : setDownloadLoading;
+      
+      setLoadingState(prev => ({ ...prev, [server.name]: true }));
       
       // Check if there's a completed scan for this server
-      const scanState = scanStates[server.name];
+      const scanState = isExternal ? externalScanStates[server.name] : scanStates[server.name];
       if (!scanState || scanState.status !== 'completed') {
-        message.warning('No completed scan available for download');
+        message.warning(`No completed ${isExternal ? 'external' : ''} scan available for download`);
         return;
       }
       
       // Download the report
-      const blob = await nessusService.downloadInternalScanReport(server.name);
+      const blob = await (isExternal ? 
+        nessusService.downloadExternalScanReport(server.name) : 
+        nessusService.downloadInternalScanReport(server.name)
+      );
       
       // Create a download link
       const url = window.URL.createObjectURL(blob);
@@ -217,7 +228,7 @@ const Dashboard = () => {
       link.href = url;
       link.setAttribute(
         'download', 
-        `internal_scan_${server.name}_${new Date().toISOString().split('T')[0]}.pdf`
+        `${isExternal ? 'external' : 'internal'}_scan_${server.name}_${new Date().toISOString().split('T')[0]}.pdf`
       );
       document.body.appendChild(link);
       link.click();
@@ -226,12 +237,13 @@ const Dashboard = () => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
       
-      message.success(`Report for ${server.name} downloaded successfully`);
+      message.success(`${isExternal ? 'External' : ''} scan report for ${server.name} downloaded successfully`);
     } catch (error) {
-      console.error('Error downloading report:', error);
-      message.error(`Failed to download report: ${error.message}`);
+      console.error(`Error downloading ${isExternal ? 'external' : ''} report:`, error);
+      message.error(`Failed to download ${isExternal ? 'external' : ''} report: ${error.message}`);
     } finally {
-      setDownloadLoading(prev => ({ ...prev, [server.name]: false }));
+      const setLoadingState = isExternal ? setExternalDownloadLoading : setDownloadLoading;
+      setLoadingState(prev => ({ ...prev, [server.name]: false }));
     }
   };
 
@@ -301,7 +313,72 @@ const Dashboard = () => {
     }
   };
 
- 
+  const handleExternalScanClick = async (server) => {
+    try {
+      // Clear any existing interval for this server
+      if (externalStatusCheckIntervals[server.name]) {
+        clearInterval(externalStatusCheckIntervals[server.name]);
+      }
+
+      setExternalScanStates(prev => ({
+        ...prev,
+        [server.name]: { status: 'starting' }
+      }));
+
+      const result = await nessusService.createAndLaunchExternalScan(server.name);
+      
+      if (result.scanId) {
+        setExternalScanStates(prev => ({
+          ...prev,
+          [server.name]: { 
+            scanId: result.scanId,
+            status: 'pending'
+          }
+        }));
+
+        // Start immediate status checking
+        await checkExternalScanStatus(result.scanId, server.name);
+        message.success(`External scan launched for ${server.name}`);
+      }
+    } catch (error) {
+      console.error('Error launching external scan:', error);
+      message.error(`Failed to launch external scan: ${error.message}`);
+      setExternalScanStates(prev => ({
+        ...prev,
+        [server.name]: null
+      }));
+    }
+  };
+
+  const handleStopExternalScan = async (scanId, serverName) => {
+    try {
+      await nessusService.stopExternalScan(scanId);
+      message.success(`External scan for ${serverName} stopped successfully`);
+      
+      // Update scan state to reflect the stopped scan
+      setExternalScanStates(prev => ({
+        ...prev,
+        [serverName]: {
+          ...prev[serverName],
+          status: 'canceled'
+        }
+      }));
+      
+      // Clear interval if it exists
+      if (externalStatusCheckIntervals[serverName]) {
+        clearInterval(externalStatusCheckIntervals[serverName]);
+        setExternalStatusCheckIntervals(prev => {
+          const newIntervals = { ...prev };
+          delete newIntervals[serverName];
+          return newIntervals;
+        });
+      }
+    } catch (error) {
+      console.error('Error stopping external scan:', error);
+      message.error(`Failed to stop external scan: ${error.message}`);
+    }
+  };
+
   // Simplified action button without progress and tooltip
   const getScanActionButton = (record) => {
     const scanState = scanStates[record.name];
@@ -339,9 +416,43 @@ const Dashboard = () => {
     );
   };
 
- 
-  // Enhanced status checking function with more frequent initial checks
+  const getExternalScanActionButton = (record) => {
+    const scanState = externalScanStates[record.name];
+    
+    if (!scanState || scanState.status === 'completed' || scanState.status === 'canceled') {
+      return (
+        <Button
+          type="text"
+          icon={<PlayCircleOutlined />}
+          onClick={() => handleExternalScanClick(record)}
+          disabled={record.status !== 'online'}
+          title="Launch External Scan"
+        />
+      );
+    }
 
+    if (['starting', 'pending', 'running'].includes(scanState.status)) {
+      return (
+        <Button
+          type="text"
+          icon={<LoadingOutlined spin />}
+          disabled
+        />
+      );
+    }
+
+    // Default state
+    return (
+      <Button
+        type="text"
+        icon={<PlayCircleOutlined />}
+        onClick={() => handleExternalScanClick(record)}
+        disabled={record.status !== 'online'}
+      />
+    );
+  };
+
+  // Enhanced status checking function with more frequent initial checks
   const checkScanStatus = useCallback(async (scanId, serverName) => {
     try {
       const status = await nessusService.getScanStatus(scanId);
@@ -404,6 +515,61 @@ const Dashboard = () => {
     }
   }, [scanStates, statusCheckIntervals]);
 
+  const checkExternalScanStatus = useCallback(async (scanId, serverName) => {
+    try {
+      const status = await nessusService.getScanStatus(scanId);
+      const currentState = externalScanStates[serverName]?.status;
+      
+      // Update state if changed
+      if (status.status !== currentState) {
+        setExternalScanStates(prev => ({
+          ...prev,
+          [serverName]: {
+            scanId,
+            status: status.status
+          }
+        }));
+      }
+
+      // Determine polling interval based on status
+      let nextInterval;
+      switch (status.status) {
+        case 'pending':
+          nextInterval = 3000; // Check every 3 seconds while pending
+          break;
+        case 'running':
+          nextInterval = 10000; // Check every 10 seconds while running
+          break;
+        case 'completed':
+          // Clear interval and update state
+          if (externalStatusCheckIntervals[serverName]) {
+            clearInterval(externalStatusCheckIntervals[serverName]);
+            setExternalStatusCheckIntervals(prev => {
+              const newIntervals = { ...prev };
+              delete newIntervals[serverName];
+              return newIntervals;
+            });
+          }
+          return;
+        default:
+          nextInterval = 30000; // Default to 30 seconds
+      }
+
+      // Set up new interval if needed
+      if (!externalStatusCheckIntervals[serverName]) {
+        const intervalId = setInterval(
+          () => checkExternalScanStatus(scanId, serverName), 
+          nextInterval
+        );
+        setExternalStatusCheckIntervals(prev => ({
+          ...prev,
+          [serverName]: intervalId
+        }));
+      }
+    } catch (error) {
+      console.error('Error checking external scan status:', error);
+    }
+  }, [externalScanStates, externalStatusCheckIntervals]);
 
   const columns = [
     {
@@ -476,8 +642,8 @@ const Dashboard = () => {
       },
     },
     {
-      title: 'Actions',
-      key: 'actions',
+      title: 'Internal',
+      key: 'internal',
       render: (_, record) => {
         const scanState = scanStates[record.name];
         
@@ -487,7 +653,7 @@ const Dashboard = () => {
               <Button 
                 type="text"
                 icon={<BugOutlined />}
-                onClick={() => handleViewVulnerabilities(record)}
+                onClick={() => handleViewVulnerabilities(record, false)}
                 disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
               />
             </Tooltip>
@@ -495,7 +661,7 @@ const Dashboard = () => {
               <Button 
                 type="text"
                 icon={downloadLoading[record.name] ? <LoadingOutlined /> : <DownloadOutlined />}
-                onClick={() => handleDownloadReport(record)}
+                onClick={() => handleDownloadReport(record, false)}
                 disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
                 loading={downloadLoading[record.name]}
               />
@@ -512,16 +678,65 @@ const Dashboard = () => {
             ) : (
               getScanActionButton(record)
             )}
-            <Button
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => handleDeleteClick(record)}
-              title="Remove Agent"
-            />
           </Space>
         );
       },
+    },
+    {
+      title: 'External',
+      key: 'external',
+      render: (_, record) => {
+        const scanState = externalScanStates[record.name];
+        
+        return (
+          <Space size="middle">
+            <Tooltip title="View External Vulnerabilities">
+              <Button 
+                type="text"
+                icon={<BugOutlined />}
+                onClick={() => handleViewVulnerabilities(record, true)}
+                disabled={!externalScanStates[record.name] || externalScanStates[record.name].status !== 'completed'}
+              />
+            </Tooltip>
+            <Tooltip title="Download External Report">
+              <Button 
+                type="text"
+                icon={externalDownloadLoading[record.name] ? <LoadingOutlined /> : <DownloadOutlined />}
+                onClick={() => handleDownloadReport(record, true)}
+                disabled={!externalScanStates[record.name] || externalScanStates[record.name].status !== 'completed'}
+                loading={externalDownloadLoading[record.name]}
+              />
+            </Tooltip>
+            {scanState && ['running', 'pending'].includes(scanState.status) ? (
+              <Tooltip title="Stop External Scan">
+                <Button
+                  type="text"
+                  danger
+                  icon={<StopOutlined />}
+                  onClick={() => handleStopExternalScan(scanState.scanId, record.name)}
+                />
+              </Tooltip>
+            ) : (
+              getExternalScanActionButton(record)
+            )}
+          </Space>
+        );
+      },
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, record) => (
+        <Space size="middle">
+          <Button
+            type="text"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteClick(record)}
+            title="Remove Agent"
+          />
+        </Space>
+      ),
     },
   ];
   return (
@@ -549,11 +764,12 @@ const Dashboard = () => {
       </Content>
 
       <InternalScanVulDetailsModal
-        visible={internalVulModalVisible}
+        visible={vulModalVisible}
         scan={selectedScanForVul}
-        onClose={() => setInternalVulModalVisible(false)}
-        onDownload={handleDownloadReport}
-        downloadLoading={selectedScanForVul ? downloadLoading[selectedScanForVul.name] : false}
+        onClose={() => setVulModalVisible(false)}
+        onDownload={(scan) => handleDownloadReport(scan, isExternalScan)}
+        downloadLoading={selectedScanForVul ? (isExternalScan ? externalDownloadLoading[selectedScanForVul.name] : downloadLoading[selectedScanForVul.name]) : false}
+        isExternal={isExternalScan}
       />
 
       <DeleteConfirmationModal

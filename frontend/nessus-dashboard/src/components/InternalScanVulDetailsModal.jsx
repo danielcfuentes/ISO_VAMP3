@@ -30,7 +30,8 @@ const InternalScanVulDetailsModal = ({
   scan, 
   onClose, 
   onDownload, 
-  downloadLoading 
+  downloadLoading,
+  isExternal = false
 }) => {
   const [vulnerabilityData, setVulnerabilityData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -38,6 +39,9 @@ const InternalScanVulDetailsModal = ({
   const [expandedRows, setExpandedRows] = useState({});
   const [pluginDetails, setPluginDetails] = useState({});
   const [exceptionModalVisible, setExceptionModalVisible] = useState(false);
+  const [vulnerabilities, setVulnerabilities] = useState([]);
+  const [selectedVul, setSelectedVul] = useState(null);
+  const [vulDetails, setVulDetails] = useState(null);
 
   // Add debug logging for scan prop
   useEffect(() => {
@@ -47,17 +51,22 @@ const InternalScanVulDetailsModal = ({
   // Fetch vulnerability data when scan is selected and modal is opened
   useEffect(() => {
     if (visible && scan && scan.name) {
-      fetchVulnerabilityData(scan.name);
+      fetchVulnerabilities();
     }
   }, [visible, scan]);
 
-  const fetchVulnerabilityData = async (serverName) => {
-    setLoading(true);
+  const fetchVulnerabilities = async () => {
     try {
-      const vulData = await nessusService.getInternalScanVulnerabilities(serverName);
-      setVulnerabilityData(vulData);
+      setLoading(true);
+      const data = await (isExternal ? 
+        nessusService.getExternalScanVulnerabilities(scan.name) : 
+        nessusService.getInternalScanVulnerabilities(scan.name)
+      );
+      setVulnerabilities(data.vulnerabilities || []);
+      setVulnerabilityData(data);
     } catch (error) {
-      console.error('Error fetching vulnerability data:', error);
+      console.error('Error fetching vulnerabilities:', error);
+      message.error('Failed to fetch vulnerabilities');
     } finally {
       setLoading(false);
     }
@@ -66,7 +75,10 @@ const InternalScanVulDetailsModal = ({
   // Fetch vulnerability details for a specific plugin
   const fetchPluginDetails = async (scanId, hostId, pluginId) => {
     try {
-      const details = await nessusService.getInternalVulnerabilityPluginDetails(scanId, hostId, pluginId);
+      const details = await (isExternal ?
+        nessusService.getVulnerabilityPluginDetails(scanId, hostId, pluginId) :
+        nessusService.getInternalVulnerabilityPluginDetails(scanId, hostId, pluginId)
+      );
       return details;
     } catch (error) {
       console.error('Error fetching plugin details:', error);
@@ -455,12 +467,23 @@ const InternalScanVulDetailsModal = ({
     }
   };
 
+  const handleVulClick = async (vul) => {
+    try {
+      setSelectedVul(vul);
+      const details = await fetchPluginDetails(vul.scan_id, vul.host_id, vul.plugin_id);
+      setVulDetails(details);
+    } catch (error) {
+      console.error('Error fetching vulnerability details:', error);
+      message.error('Failed to fetch vulnerability details');
+    }
+  };
+
   return (
     <Modal
       title={
         <Space>
           <BugOutlined />
-          Internal Scan Details: {scan?.name}
+          {isExternal ? 'External' : 'Internal'} Scan Details: {scan?.name}
         </Space>
       }
       open={visible}
@@ -584,6 +607,29 @@ const InternalScanVulDetailsModal = ({
           }
         }}
       />
+
+      {selectedVul && vulDetails && (
+        <div className="mt-4 p-4 border rounded">
+          <Title level={5}>{selectedVul.plugin_name}</Title>
+          <Space direction="vertical" size="small">
+            <Text strong>Severity: </Text>
+            <Tag color={selectedVul.severity === 'Critical' ? 'red' : 
+                        selectedVul.severity === 'High' ? 'orange' : 
+                        selectedVul.severity === 'Medium' ? 'yellow' : 
+                        selectedVul.severity === 'Low' ? 'green' : 'blue'}>
+              {selectedVul.severity}
+            </Tag>
+            <Text strong>Description: </Text>
+            <Text>{vulDetails.description}</Text>
+            <Text strong>Solution: </Text>
+            <Text>{vulDetails.solution}</Text>
+            <Text strong>Risk Factor: </Text>
+            <Text>{vulDetails.risk_factor}</Text>
+            <Text strong>CVSS Base Score: </Text>
+            <Text>{vulDetails.cvss_base_score}</Text>
+          </Space>
+        </div>
+      )}
     </Modal>
   );
 };
