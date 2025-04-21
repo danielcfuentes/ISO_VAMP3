@@ -475,42 +475,33 @@ const InternalScanVulDetailsModal = ({
 
   return (
     <Modal
-      title={
-        <Space>
-          <BugOutlined />
-          {isExternal ? 'External' : 'Internal'} Scan Details: {scan?.name}
-        </Space>
-      }
+      title={<div style={{ fontSize: '18px', fontWeight: 500 }}>Internal Scan Details: {scan?.name}</div>}
       open={visible}
       onCancel={onClose}
+      width={1000}
       footer={[
         <Button key="close" onClick={onClose}>
           Close
         </Button>,
-        hasHighSeverityVulnerabilities() && (
-          <Button
-            key="exception"
-            type="primary"
-            danger
-            icon={<FileTextOutlined />}
-            onClick={() => setExceptionModalVisible(true)}
-          >
-            Request Exception
-          </Button>
-        ),
-        scan?.status === 'completed' && (
-          <Button
-            key="download"
-            type="primary"
-            icon={downloadLoading ? <LoadingOutlined spin /> : <DownloadOutlined />}
-            onClick={() => onDownload(scan)}
-            loading={downloadLoading}
-          >
-            Download Report
-          </Button>
-        )
+        <Button 
+          key="exception" 
+          type="primary" 
+          danger
+          icon={<FileTextOutlined />}
+          onClick={() => setExceptionModalVisible(true)}
+        >
+          Request Exception
+        </Button>,
+        <Button
+          key="download"
+          type="primary"
+          icon={<DownloadOutlined />}
+          style={{ backgroundColor: '#1890ff', borderColor: '#1890ff' }}
+          onClick={() => onDownload(scan)}
+        >
+          Download Report
+        </Button>
       ]}
-      width={800}
     >
       {loading ? (
         <div className="flex justify-center items-center p-10">
@@ -521,45 +512,38 @@ const InternalScanVulDetailsModal = ({
           {renderScanOverview()}
           
           <Tabs 
-            activeKey={activeTabKey} 
-            onChange={(key) => {
-              console.log('Tab changed to:', key);
-              setActiveTabKey(key);
-            }}
+            defaultActiveKey="summary"
+            className="custom-tabs"
             items={[
               {
-                key: "summary",
+                key: 'summary',
                 label: (
-                  <span>
-                    <BarChartOutlined />
-                    Summary
+                  <span className="tab-label">
+                    <FileTextOutlined />
+                    <span className="tab-text">Summary</span>
                   </span>
                 ),
                 children: renderVulnerabilitySummary()
               },
               {
-                key: "vulnerabilities",
+                key: 'vulnerabilities',
                 label: (
-                  <span>
+                  <span className="tab-label">
                     <BugOutlined />
-                    Vulnerabilities
+                    <span className="tab-text">Vulnerabilities</span>
                   </span>
                 ),
                 children: renderVulnerabilityDetails()
               },
               {
-                key: "history",
+                key: 'history',
                 label: (
-                  <span>
+                  <span className="tab-label">
                     <HistoryOutlined />
-                    Scan History
+                    <span className="tab-text">Scan History</span>
                   </span>
                 ),
-                children: (
-                  <>
-                    <ScanHistoryTab serverName={scan?.name} isExternal={isExternal} />
-                  </>
-                )
+                children: <ScanHistoryTab serverName={scan?.name} isExternal={isExternal} />
               }
             ]}
           />

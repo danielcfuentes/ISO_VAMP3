@@ -1,0 +1,144 @@
+:root {
+  --utep-navy: #041E42;
+  --utep-orange: #FF7300;
+  --utep-white: #FFFFFF;
+  --utep-gray: #F5F5F5;
+}
+
+/* Override Ant Design theme colors */
+.ant-btn-primary {
+  background-color: var(--utep-orange) !important;
+  border-color: var(--utep-orange) !important;
+}
+
+.ant-btn-primary:hover {
+  background-color: #E66800 !important;
+  border-color: #E66800 !important;
+}
+
+.ant-menu-dark {
+  background-color: var(--utep-navy) !important;
+}
+
+.ant-menu-item-selected {
+  background-color: var(--utep-orange) !important;
+}
+
+.ant-layout-sider {
+  background-color: var(--utep-navy) !important;
+}
+
+.ant-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ant-table-thead > tr > th {
+  background-color: var(--utep-navy) !important;
+  color: var(--utep-white) !important;
+}
+
+.ant-tabs-tab.ant-tabs-tab-active {
+  background-color: var(--utep-orange) !important;
+  border-color: var(--utep-orange) !important;
+  color: var(--utep-white) !important;
+}
+
+.ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--utep-white) !important;
+}
+
+.login-card {
+  background: var(--utep-white);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.utep-logo {
+  height: 60px;
+  margin-bottom: 20px;
+}
+
+.status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--utep-orange);
+  margin-right: 8px;
+}
+
+/* Custom Modal Tabs Styling */
+.custom-tabs .ant-tabs-nav {
+  margin-bottom: 24px;
+}
+
+.custom-tabs .ant-tabs-tab {
+  padding: 12px 24px;
+  margin: 0 2px;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.custom-tabs .ant-tabs-tab:first-child {
+  margin-left: 0;
+}
+
+.custom-tabs .ant-tabs-tab.ant-tabs-tab-active {
+  background-color: var(--utep-orange);
+  border-radius: 8px;
+  border-color: var(--utep-orange);
+}
+
+.custom-tabs .tab-label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.custom-tabs .tab-text {
+  margin-left: 0px;
+}
+
+/* Modal Button Colors */
+.ant-modal-footer .ant-btn-primary.ant-btn-dangerous {
+  background-color: #ff4d4f !important;
+  border-color: #ff4d4f !important;
+}
+
+.ant-modal-footer .ant-btn-primary:not(.ant-btn-dangerous) {
+  background-color: #1890ff !important;
+  border-color: #1890ff !important;
+}
+
+/* Modal Header */
+.ant-modal-header {
+  border-bottom: 1px solid #f0f0f0;
+  padding: 16px 24px;
+}
+
+.ant-modal-title {
+  color: var(--utep-navy);
+}
+
+/* Status Tags */
+.status-tag-completed {
+  background-color: #52c41a;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 12px;
+}
+
+.status-tag-cancelled {
+  background-color: #faad14;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 12px;
+}
+
+.status-tag-aborted {
+  background-color: #ff4d4f;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 12px;
+} 

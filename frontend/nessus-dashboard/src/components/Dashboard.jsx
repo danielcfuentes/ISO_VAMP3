@@ -627,12 +627,22 @@ const Dashboard = () => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ background: '#fff', padding: '0 16px' }}>
-        <Title level={2} style={{ margin: '16px 0' }}>Nessus Dashboard</Title>
+      <Header style={{ background: '#041E42', padding: '0 16px', display: 'flex', alignItems: 'center' }}>
+        <Title level={2} style={{ margin: '16px 0', color: 'white' }}>Vulnerability Management Program (VaMP)</Title>
       </Header>
       <Content style={{ padding: '24px' }}>
         <Card>
-          <Tabs activeKey={activeTab} onChange={setActiveTab}>
+          <Tabs 
+            activeKey={activeTab} 
+            onChange={setActiveTab}
+            type="card"
+            style={{ 
+              '& .ant-tabs-tab.ant-tabs-tab-active': { 
+                backgroundColor: '#FF7300',
+                borderColor: '#FF7300'
+              }
+            }}
+          >
             <TabPane tab="Internal Scans" key="internal">
               <Table
                 columns={getColumns()}

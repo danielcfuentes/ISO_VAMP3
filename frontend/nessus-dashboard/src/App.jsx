@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ConfigProvider } from 'antd';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './components/MainLayout';
@@ -7,6 +7,7 @@ import ExceptionRequests from './components/ExceptionRequests';
 import AdminDashboard from './components/AdminDashboard';
 import Login from './components/Login';
 import nessusService from './services/nessusService';
+import './styles/theme.css';  // Import UTEP theme
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(

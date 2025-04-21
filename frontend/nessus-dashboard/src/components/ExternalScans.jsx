@@ -326,7 +326,7 @@ const ExternalScans = () => {
           
           <Alert
             message="Note"
-            description="This scan will run against the provided target from the Nessus scanner. Make sure the target is accessible from the scanner's network."
+            description="This scan will run against the provided target from the UTEP security scanner. Make sure the target is accessible from the scanner's network."
             type="info"
             showIcon
             className="mb-4"

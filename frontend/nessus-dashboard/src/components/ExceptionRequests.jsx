@@ -235,6 +235,7 @@ const ExceptionRequests = () => {
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => handleOpenModal('create')}
+            style={{ backgroundColor: '#1890ff', borderColor: '#1890ff' }}
           >
             New Exception Request
           </Button>
@@ -413,7 +414,13 @@ const ExceptionRequests = () => {
             </Form.Item>
             
             <Form.Item>
-              <Button type="primary" htmlType="submit" loading={submitting} block>
+              <Button 
+                type="primary" 
+                htmlType="submit" 
+                loading={submitting} 
+                block
+                style={{ backgroundColor: '#1890ff', borderColor: '#1890ff' }}
+              >
                 Submit Request
               </Button>
             </Form.Item>

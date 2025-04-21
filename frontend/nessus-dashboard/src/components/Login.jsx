@@ -42,8 +42,9 @@ const Login = ({ onLoginSuccess }) => {
 
         <Card className="login-card">
           <div className={`login-title ${titleVisible ? 'fade-in' : ''}`}>
-            <Title level={2}>UTEP VAMP</Title>
-            <Paragraph className="subtitle">Vulnerability Management Dashboard</Paragraph>
+            <img src="/utep_logo.png" alt="UTEP Logo" className="utep-logo" />
+            <Title level={2}>Information Security Office</Title>
+            <Paragraph className="subtitle">Vulnerability Management Program (VaMP)</Paragraph>
           </div>
 
           <Form
@@ -55,7 +56,7 @@ const Login = ({ onLoginSuccess }) => {
             className={`login-form ${titleVisible ? 'fade-in' : ''}`}
           >
             <Form.Item name="username" rules={[{ required: true, message: 'Please input your username!' }]}> 
-              <Input prefix={<UserOutlined className="input-icon" />} placeholder="Username" />
+              <Input prefix={<UserOutlined className="input-icon" />} placeholder="UTEP Username" />
             </Form.Item>
 
             <Form.Item name="password" rules={[{ required: true, message: 'Please input your password!' }]}> 
@@ -64,22 +65,22 @@ const Login = ({ onLoginSuccess }) => {
 
             <Form.Item>
               <Button type="primary" htmlType="submit" loading={loading} className="login-button">
-                {loading ? 'Authenticating...' : 'Log in'}
+                {loading ? 'Authenticating...' : 'Sign In'}
               </Button>
             </Form.Item>
           </Form>
 
-          <Divider className="divider">Nessus Secure Connection</Divider>
+          <Divider className="divider">Secure UTEP Connection</Divider>
 
           <div className="secure-text">
             <SafetyOutlined className="secure-icon" />
-            <Text type="secondary">End-to-end encrypted connection to Nessus platform</Text>
+            <Text type="secondary">End-to-end encrypted connection to UTEP VaMP</Text>
           </div>
         </Card>
 
         <div className="footer">
           <span className="status-indicator" /> System Status: Operational
-          <div>© {new Date().getFullYear()} UTEP Security Operations • All rights reserved</div>
+          <div>© {new Date().getFullYear()} UTEP Information Security Office • All rights reserved</div>
         </div>
       </div>
     </div>
