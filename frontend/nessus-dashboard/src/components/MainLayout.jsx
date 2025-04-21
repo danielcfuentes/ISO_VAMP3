@@ -1,7 +1,7 @@
 import React from 'react';
 import { Layout, Menu, Button } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { DesktopOutlined, ScanOutlined, FileTextOutlined, DashboardOutlined, LogoutOutlined } from '@ant-design/icons';
+import { DesktopOutlined, FileTextOutlined, DashboardOutlined, LogoutOutlined } from '@ant-design/icons';
 
 const { Content, Sider } = Layout;
 
@@ -15,11 +15,6 @@ const MainLayout = ({ children, isAdmin, onLogout }) => {
       key: '/my-agents',
       icon: <DesktopOutlined />,
       label: 'Internal Agent Scans',
-    },
-    {
-      key: '/external-scans',
-      icon: <ScanOutlined />,
-      label: 'External Scans',
     },
     {
       key: '/exception-requests',

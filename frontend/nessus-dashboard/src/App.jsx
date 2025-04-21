@@ -3,7 +3,6 @@ import { ConfigProvider } from 'antd';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './components/MainLayout';
 import Dashboard from './components/Dashboard';
-import ExternalScans from './components/ExternalScans';
 import ExceptionRequests from './components/ExceptionRequests';
 import AdminDashboard from './components/AdminDashboard';
 import Login from './components/Login';
@@ -60,12 +59,6 @@ function App() {
           <Route path="/my-agents" element={
             <ProtectedRoute>
               <Dashboard />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/external-scans" element={
-            <ProtectedRoute>
-              <ExternalScans />
             </ProtectedRoute>
           } />
           

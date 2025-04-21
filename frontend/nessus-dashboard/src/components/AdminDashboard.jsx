@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Card, Typography, Space, Table, Tag, Button, Modal, message, Input } from 'antd';
-import { DashboardOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { Card, Typography, Space, Table, Tag, Button, Modal, message, Input, Tabs } from 'antd';
+import { DashboardOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ScanOutlined, FileTextOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
+import ExternalScans from './ExternalScans';
 
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
@@ -151,6 +152,134 @@ const AdminDashboard = () => {
     },
   ];
 
+  const items = [
+    {
+      key: 'exception-requests',
+      label: (
+        <span>
+          <FileTextOutlined />
+          Exception Requests Dashboard
+        </span>
+      ),
+      children: (
+        <div>
+          <Card title="Exception Requests" className="mb-4">
+            <Table 
+              columns={columns} 
+              dataSource={exceptionRequests}
+              rowKey="id"
+              loading={loading}
+            />
+          </Card>
+
+          <Modal
+            title="Exception Request Details"
+            open={modalVisible}
+            onCancel={() => setModalVisible(false)}
+            footer={null}
+            width={700}
+          >
+            {selectedRequest && (
+              <div>
+                <div className="mb-4">
+                  <Text strong>Server Name: </Text>
+                  <Text>{selectedRequest.serverName}</Text>
+                </div>
+                
+                <div className="mb-4">
+                  <Text strong>Status: </Text>
+                  {getStatusTag(selectedRequest.status)}
+                </div>
+                
+                <div className="mb-4">
+                  <Text strong>Requested By: </Text>
+                  <Text>{selectedRequest.requestedBy}</Text>
+                </div>
+                
+                <div className="mb-4">
+                  <Text strong>Request Date: </Text>
+                  <Text>{moment(selectedRequest.requestedDate).format('YYYY-MM-DD')}</Text>
+                </div>
+                
+                <div className="mb-4">
+                  <Text strong>Expiration Date: </Text>
+                  <Text>{moment(selectedRequest.expirationDate).format('YYYY-MM-DD')}</Text>
+                </div>
+                
+                <div className="mb-4">
+                  <Text strong>Vulnerabilities: </Text>
+                  <div>
+                    {selectedRequest.vulnerabilities.map((vuln, index) => (
+                      <Tag key={index}>{vuln}</Tag>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="mb-4">
+                  <Text strong>Justification: </Text>
+                  <p>{selectedRequest.justification}</p>
+                </div>
+                
+                <div className="mb-4">
+                  <Text strong>Mitigation Measures: </Text>
+                  <p>{selectedRequest.mitigation}</p>
+                </div>
+
+                {selectedRequest.status === 'pending' && (
+                  <div className="mt-6">
+                    {showDeclineForm && (
+                      <div className="mb-4">
+                        <TextArea
+                          rows={4}
+                          placeholder="Reason for declining (required)"
+                          value={declineReason}
+                          onChange={(e) => setDeclineReason(e.target.value)}
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-end space-x-4">
+                      <Button 
+                        type="primary" 
+                        onClick={handleApprove}
+                        loading={updating}
+                      >
+                        Approve
+                      </Button>
+                      <Button 
+                        danger 
+                        onClick={handleDecline}
+                        loading={updating}
+                      >
+                        {showDeclineForm ? 'Submit Decline' : 'Decline'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {selectedRequest.status === 'declined' && selectedRequest.declineReason && (
+                  <div className="mt-4">
+                    <Text strong>Decline Reason: </Text>
+                    <p className="text-red-500">{selectedRequest.declineReason}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </Modal>
+        </div>
+      ),
+    },
+    {
+      key: 'external-scans',
+      label: (
+        <span>
+          <ScanOutlined />
+          External Scans
+        </span>
+      ),
+      children: <ExternalScans />,
+    },
+  ];
+
   return (
     <div className="p-6">
       <Card className="shadow-sm">
@@ -164,112 +293,11 @@ const AdminDashboard = () => {
         </div>
         
         <Paragraph className="text-gray-600 mb-4">
-          Welcome to the Admin Dashboard. Review vulnerability exception requests below.
+          Welcome to the Admin Dashboard. Manage exception requests and external scans below.
         </Paragraph>
         
-        <Card title="Exception Requests" className="mb-4">
-          <Table 
-            columns={columns} 
-            dataSource={exceptionRequests}
-            rowKey="id"
-            loading={loading}
-          />
-        </Card>
+        <Tabs defaultActiveKey="exception-requests" items={items} />
       </Card>
-
-      <Modal
-        title="Exception Request Details"
-        open={modalVisible}
-        onCancel={() => setModalVisible(false)}
-        footer={null}
-        width={700}
-      >
-        {selectedRequest && (
-          <div>
-            <div className="mb-4">
-              <Text strong>Server Name: </Text>
-              <Text>{selectedRequest.serverName}</Text>
-            </div>
-            
-            <div className="mb-4">
-              <Text strong>Status: </Text>
-              {getStatusTag(selectedRequest.status)}
-            </div>
-            
-            <div className="mb-4">
-              <Text strong>Requested By: </Text>
-              <Text>{selectedRequest.requestedBy}</Text>
-            </div>
-            
-            <div className="mb-4">
-              <Text strong>Request Date: </Text>
-              <Text>{moment(selectedRequest.requestedDate).format('YYYY-MM-DD')}</Text>
-            </div>
-            
-            <div className="mb-4">
-              <Text strong>Expiration Date: </Text>
-              <Text>{moment(selectedRequest.expirationDate).format('YYYY-MM-DD')}</Text>
-            </div>
-            
-            <div className="mb-4">
-              <Text strong>Vulnerabilities: </Text>
-              <div>
-                {selectedRequest.vulnerabilities.map((vuln, index) => (
-                  <Tag key={index}>{vuln}</Tag>
-                ))}
-              </div>
-            </div>
-            
-            <div className="mb-4">
-              <Text strong>Justification: </Text>
-              <p>{selectedRequest.justification}</p>
-            </div>
-            
-            <div className="mb-4">
-              <Text strong>Mitigation Measures: </Text>
-              <p>{selectedRequest.mitigation}</p>
-            </div>
-
-            {selectedRequest.status === 'pending' && (
-              <div className="mt-6">
-                {showDeclineForm && (
-                  <div className="mb-4">
-                    <TextArea
-                      rows={4}
-                      placeholder="Reason for declining (required)"
-                      value={declineReason}
-                      onChange={(e) => setDeclineReason(e.target.value)}
-                    />
-                  </div>
-                )}
-                <div className="flex justify-end space-x-4">
-                  <Button 
-                    type="primary" 
-                    onClick={handleApprove}
-                    loading={updating}
-                  >
-                    Approve
-                  </Button>
-                  <Button 
-                    danger 
-                    onClick={handleDecline}
-                    loading={updating}
-                  >
-                    {showDeclineForm ? 'Submit Decline' : 'Decline'}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {selectedRequest.status === 'declined' && selectedRequest.declineReason && (
-              <div className="mt-4">
-                <Text strong>Decline Reason: </Text>
-                <p className="text-red-500">{selectedRequest.declineReason}</p>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
     </div>
   );
 };
