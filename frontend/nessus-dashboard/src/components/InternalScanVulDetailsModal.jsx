@@ -43,11 +43,6 @@ const InternalScanVulDetailsModal = ({
   const [selectedVul, setSelectedVul] = useState(null);
   const [vulDetails, setVulDetails] = useState(null);
 
-  // Add debug logging for scan prop
-  useEffect(() => {
-    console.log('InternalScanVulDetailsModal scan prop updated:', scan);
-  }, [scan]);
-
   // Fetch vulnerability data when scan is selected and modal is opened
   useEffect(() => {
     if (visible && scan && scan.name) {
@@ -562,8 +557,7 @@ const InternalScanVulDetailsModal = ({
                 ),
                 children: (
                   <>
-                    {console.log('Rendering ScanHistoryTab with serverName:', scan?.name)}
-                    <ScanHistoryTab serverName={scan?.name} />
+                    <ScanHistoryTab serverName={scan?.name} isExternal={isExternal} />
                   </>
                 )
               }

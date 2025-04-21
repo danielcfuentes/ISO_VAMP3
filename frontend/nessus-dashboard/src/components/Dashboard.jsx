@@ -82,7 +82,6 @@ const Dashboard = () => {
   useEffect(() => {
     const checkExistingScans = async () => {
       for (const server of servers) { 
-        // Internal scans (keep existing functionality)
         if (internalScanStates[server.name]?.scanId) {
           const status = await nessusService.getScanStatus(internalScanStates[server.name].scanId);
           setInternalScanStates(prev => ({
@@ -95,7 +94,6 @@ const Dashboard = () => {
           }));
         }
 
-        // External scans (new separate handling)
         if (externalScanStates[server.name]?.scanId) {
           const externalScans = await nessusService.getExternalScans();
           const serverExternalScan = externalScans.find(scan => scan.name === server.name);
@@ -203,23 +201,17 @@ const Dashboard = () => {
   };
 
   const handleDeleteConfirm = async () => {
+    if (!selectedServerToDelete) return;
+
     try {
       setDeleteLoading(true);
-      const agentGroups = await nessusService.getAgentGroups();
-      
-      if (agentGroups && agentGroups.id && selectedServerToDelete) {
-        await nessusService.removeAgent(
-          agentGroups.id,
-          selectedServerToDelete.key
-        );
-        
-        message.success(`Successfully removed ${selectedServerToDelete.name}`);
-        setDeleteModalVisible(false);
-        fetchServers();
-      }
+      await nessusService.deleteServer(selectedServerToDelete.name);
+      setServers(servers.filter(s => s.name !== selectedServerToDelete.name));
+      setDeleteModalVisible(false);
+      setSelectedServerToDelete(null);
+      message.success('Server deleted successfully');
     } catch (error) {
-      console.error('Error removing agent:', error);
-      message.error('Failed to remove agent');
+      message.error(error.message);
     } finally {
       setDeleteLoading(false);
     }

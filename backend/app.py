@@ -1467,11 +1467,13 @@ def get_internal_scan_history(server_name):
         response.raise_for_status()
         scans = response.json().get('scans', [])
         
-        # Filter scans for the server
-        server_scans = [s for s in scans if server_name.lower() in s['name'].lower()]
+        # Filter scans for the server only
+        server_scans = [
+            s for s in scans 
+            if server_name.lower() in s['name'].lower()
+        ]
         
         if not server_scans:
-            # Return empty history instead of error
             return jsonify({
                 'history': []
             })
@@ -1505,11 +1507,12 @@ def get_internal_scan_history(server_name):
                             'progress': history_item.get('progress', 0),
                             'total_hosts': history_item.get('total_hosts', 0),
                             'scanned_hosts': history_item.get('scanned_hosts', 0),
-                            'scan_name': scan['name']  # Add scan name to identify which scan this history belongs to
+                            'scan_name': scan['name'],
+                            'scan_type': 'internal'
                         })
             except Exception as e:
                 logging.error(f"Error getting scan details for scan {scan_id}: {str(e)}")
-                continue  # Skip this scan and continue with others
+                continue
         
         # Sort history by creation date (newest first)
         all_history.sort(key=lambda x: x['creation_date'], reverse=True)
@@ -1520,6 +1523,104 @@ def get_internal_scan_history(server_name):
 
     except Exception as e:
         logging.error(f"Error getting scan history: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/external-scan/history/<server_name>', methods=['GET'])
+@login_required
+def get_external_scan_history(server_name):
+    """
+    Get the external scan history for a specific server
+    """
+    try:
+        token = session.get('token')
+        if not token:
+            return jsonify({'error': 'No valid session'}), 401
+
+        # Get ExternalScans folder
+        folders_response = requests.get(
+            f'{NESSUS_URL}/folders',
+            headers=get_headers(),
+            verify=False
+        )
+        folders_response.raise_for_status()
+        folders = folders_response.json().get('folders', [])
+        
+        # Find external scans folder
+        folder_id = None
+        for folder in folders:
+            if folder['name'] == 'ExternalScans' or folder['name'] == 'External Scans':
+                folder_id = folder['id']
+                break
+        
+        if not folder_id:
+            return jsonify({'history': []})
+        
+        # Get all scans in the folder
+        response = requests.get(
+            f'{NESSUS_URL}/scans',
+            params={'folder_id': folder_id},
+            headers=get_headers(),
+            verify=False
+        )
+        response.raise_for_status()
+        scans = response.json().get('scans', [])
+        
+        # Filter scans for the server only
+        server_scans = [
+            s for s in scans 
+            if server_name.lower() in s['name'].lower()
+        ]
+        
+        if not server_scans:
+            return jsonify({
+                'history': []
+            })
+
+        # Get history from all scans
+        all_history = []
+        for scan in server_scans:
+            scan_id = scan['id']
+            
+            try:
+                # Get scan details which includes history
+                scan_details_response = requests.get(
+                    f'{NESSUS_URL}/scans/{scan_id}',
+                    headers=get_headers(),
+                    verify=False
+                )
+                scan_details_response.raise_for_status()
+                scan_details = scan_details_response.json()
+                
+                # Format history data
+                if 'history' in scan_details:
+                    for history_item in scan_details['history']:
+                        all_history.append({
+                            'history_id': history_item.get('history_id'),
+                            'status': history_item.get('status'),
+                            'starttime': format_timestamp(history_item.get('creation_date')),
+                            'endtime': format_timestamp(history_item.get('last_modification_date')),
+                            'creation_date': format_timestamp(history_item.get('creation_date')),
+                            'last_modification_date': format_timestamp(history_item.get('last_modification_date')),
+                            'uuid': history_item.get('uuid'),
+                            'progress': history_item.get('progress', 0),
+                            'total_hosts': history_item.get('total_hosts', 0),
+                            'scanned_hosts': history_item.get('scanned_hosts', 0),
+                            'scan_name': scan['name'],
+                            'scan_type': 'external'
+                        })
+            except Exception as e:
+                logging.error(f"Error getting scan details for scan {scan_id}: {str(e)}")
+                continue
+        
+        # Sort history by creation date (newest first)
+        all_history.sort(key=lambda x: x['creation_date'], reverse=True)
+        
+        return jsonify({
+            'history': all_history
+        })
+
+    except Exception as e:
+        logging.error(f"Error getting external scan history: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # =============================================================================

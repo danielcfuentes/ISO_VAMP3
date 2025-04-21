@@ -659,6 +659,19 @@ class NessusService {
       throw new Error(error.message || 'Failed to create and launch internal scan');
     }
   }
+
+  async getExternalScanHistory(serverName) {
+    try {
+      const response = await axios.get(
+        `${API_URL}/external-scan/history/${serverName}`,
+        { withCredentials: true }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching external scan history:', error);
+      throw new Error(error.response?.data?.error || 'Failed to fetch external scan history');
+    }
+  }
 }
 
 export default new NessusService();

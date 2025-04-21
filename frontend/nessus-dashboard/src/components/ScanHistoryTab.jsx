@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { Table, Tag, Space, Button, Card, message } from 'antd';
 import { DownOutlined, UpOutlined } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 
-const ScanHistoryTab = ({ serverName }) => {
-  console.log('ScanHistoryTab rendered with serverName:', serverName);
-  
+const ScanHistoryTab = ({ serverName, isExternal }) => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState([]);
@@ -13,17 +12,24 @@ const ScanHistoryTab = ({ serverName }) => {
   const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
-    console.log('useEffect triggered with serverName:', serverName);
-    
     const fetchHistory = async () => {
       try {
-        console.log('Fetching scan history for server:', serverName);
+        console.log('Scan History Debug: Fetching history for', { serverName, isExternal });
         setLoading(true);
-        const data = await nessusService.getScanHistory(serverName);
-        console.log('Received scan history data:', data);
-        setHistory(data.history);
+        const data = isExternal 
+          ? await nessusService.getExternalScanHistory(serverName)
+          : await nessusService.getScanHistory(serverName);
+
+        console.log('Scan History Debug: API Response', data);
+
+        if (!data || !data.history) {
+          console.warn('Scan History Debug: No history data received');
+          setHistory([]);
+        } else {
+          setHistory(data.history);
+        }
       } catch (error) {
-        console.error('Error fetching scan history:', error);
+        console.error('Scan History Debug: Error', error.message);
         message.error(error.message);
       } finally {
         setLoading(false);
@@ -32,61 +38,69 @@ const ScanHistoryTab = ({ serverName }) => {
 
     if (serverName) {
       fetchHistory();
-    } else {
-      console.warn('No serverName provided to ScanHistoryTab');
     }
-  }, [serverName]);
+  }, [serverName, isExternal]);
+
+  const handleExpand = (expanded, record) => {
+    if (expanded) {
+      setExpandedRows([record.key]);
+    } else {
+      setExpandedRows([]);
+    }
+  };
 
   const columns = [
     {
-      title: 'History ID',
-      dataIndex: 'history_id',
-      key: 'history_id',
-      width: 100,
+      title: 'Scan Name',
+      dataIndex: 'scan_name',
+      key: 'scan_name',
+      render: (text) => <span>{text}</span>,
     },
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      width: 120,
       render: (status) => {
         const statusColors = {
           completed: 'success',
           running: 'processing',
-          pending: 'warning',
-          canceled: 'default',
-          failed: 'error'
+          failed: 'error',
+          canceled: 'warning',
+          pending: 'default'
         };
-        return <Tag color={statusColors[status] || 'default'}>{status.toUpperCase()}</Tag>;
+        return (
+          <Tag color={statusColors[status] || 'default'}>
+            {status?.toUpperCase()}
+          </Tag>
+        );
       },
     },
     {
       title: 'Start Time',
       dataIndex: 'starttime',
       key: 'starttime',
-      width: 200,
+      render: (text) => <span>{text || 'N/A'}</span>,
     },
     {
       title: 'End Time',
       dataIndex: 'endtime',
       key: 'endtime',
-      width: 200,
+      render: (text) => <span>{text || 'N/A'}</span>,
     },
     {
-      title: 'Actions',
-      key: 'actions',
-      width: 100,
+      title: 'Progress',
+      dataIndex: 'progress',
+      key: 'progress',
+      render: (progress) => <span>{progress}%</span>,
+    },
+    {
+      title: 'Action',
+      key: 'action',
       render: (_, record) => (
         <Button
           type="text"
-          icon={expandedRows.includes(record.history_id) ? <UpOutlined /> : <DownOutlined />}
-          onClick={() => {
-            if (expandedRows.includes(record.history_id)) {
-              setExpandedRows(expandedRows.filter(id => id !== record.history_id));
-            } else {
-              setExpandedRows([...expandedRows, record.history_id]);
-            }
-          }}
+          icon={expandedRows.includes(record.key) ? <UpOutlined /> : <DownOutlined />}
+          onClick={() => handleExpand(!expandedRows.includes(record.key), record)}
         />
       ),
     },
@@ -94,11 +108,20 @@ const ScanHistoryTab = ({ serverName }) => {
 
   const expandedRowRender = (record) => {
     return (
-      <Card size="small" title="Additional Details">
-        <Space direction="vertical">
-          <div><strong>Creation Date:</strong> {record.creation_date}</div>
-          <div><strong>Last Modified:</strong> {record.last_modification_date}</div>
-          <div><strong>UUID:</strong> {record.uuid}</div>
+      <Card size="small" title="Scan Details">
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div>
+            <strong>Scan Type:</strong> {record.scan_type || 'N/A'}
+          </div>
+          <div>
+            <strong>Total Hosts:</strong> {record.total_hosts || 'N/A'}
+          </div>
+          <div>
+            <strong>Scanned Hosts:</strong> {record.scanned_hosts || 'N/A'}
+          </div>
+          <div>
+            <strong>UUID:</strong> {record.uuid || 'N/A'}
+          </div>
         </Space>
       </Card>
     );
@@ -107,27 +130,31 @@ const ScanHistoryTab = ({ serverName }) => {
   return (
     <Table
       columns={columns}
-      dataSource={history}
+      dataSource={history.map((item, index) => ({
+        ...item,
+        key: index,
+      }))}
       loading={loading}
-      rowKey="history_id"
-      expandable={{
-        expandedRowRender,
-        expandedRowKeys: expandedRows,
-        expandRowByClick: true,
-      }}
       pagination={{
         current: currentPage,
         pageSize: pageSize,
-        total: history.length,
         onChange: (page, size) => {
           setCurrentPage(page);
           setPageSize(size);
         },
-        showSizeChanger: true,
-        showTotal: (total) => `Total ${total} items`,
+      }}
+      expandable={{
+        expandedRowRender,
+        expandedRowKeys: expandedRows,
+        onExpand: handleExpand,
       }}
     />
   );
+};
+
+ScanHistoryTab.propTypes = {
+  serverName: PropTypes.string.isRequired,
+  isExternal: PropTypes.bool.isRequired
 };
 
 export default ScanHistoryTab; 
