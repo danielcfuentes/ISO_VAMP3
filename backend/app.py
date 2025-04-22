@@ -1770,47 +1770,154 @@ def create_exception_request():
 @app.route('/api/exception-requests', methods=['GET'])
 @login_required
 def get_exception_requests():
-    """
-    Get exception requests for the current user
-    """
     try:
         # Get the username from the session
-        username = session.get('username', 'unknown')
+        username = session.get('username')
+        if not username:
+            return jsonify({
+                'success': False,
+                'message': 'User not authenticated'
+            }), 401
+
+        # Query to get exception requests for the user
+        query = """
+        SELECT 
+            ID, ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
+            RequesterJobDescription, RequesterEmail, RequesterPhone,
+            DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
+            DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail,
+            DepartmentHeadPhone, ApproverUsername, DataClassification,
+            ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
+            Vulnerabilities, Justification, Mitigation, TermsAccepted,
+            Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt
+        FROM VulnerabilityExceptionRequests
+        WHERE RequestedBy = ?
+        ORDER BY CreatedAt DESC
+        """
         
-        logging.info(f"Fetching exception requests for user {username}")
+        results = execute_query(query, (username,))
         
-        # Always use the user-specific script
-        result = execute_prisma_script('get-user-exceptions', {'username': username})
+        # Format the results
+        requests = []
+        for row in results:
+            request = {
+                'id': row[0],
+                'serverName': row[1],
+                'requesterFirstName': row[2],
+                'requesterLastName': row[3],
+                'requesterDepartment': row[4],
+                'requesterJobDescription': row[5],
+                'requesterEmail': row[6],
+                'requesterPhone': row[7],
+                'departmentHeadUsername': row[8],
+                'departmentHeadFirstName': row[9],
+                'departmentHeadLastName': row[10],
+                'departmentHeadDepartment': row[11],
+                'departmentHeadJobDescription': row[12],
+                'departmentHeadEmail': row[13],
+                'departmentHeadPhone': row[14],
+                'approverUsername': row[15],
+                'dataClassification': row[16],
+                'exceptionDurationType': row[17],
+                'expirationDate': row[18],
+                'usersAffected': row[19],
+                'dataAtRisk': row[20],
+                'vulnerabilities': row[21],
+                'justification': row[22],
+                'mitigation': row[23],
+                'termsAccepted': row[24],
+                'status': row[25],
+                'declineReason': row[26],
+                'requestedBy': row[27],
+                'requestedDate': row[28],
+                'createdAt': row[29],
+                'updatedAt': row[30]
+            }
+            requests.append(request)
         
-        if 'error' in result:
-            return jsonify({'error': result['error']}), 500
-            
-        return jsonify(result), 200
+        return jsonify(requests), 200
+        
     except Exception as e:
-        logging.error(f"Error getting exception requests: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logging.error(f"Error fetching exception requests: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching exception requests: {str(e)}'
+        }), 500
 
 @app.route('/api/admin/exception-requests', methods=['GET'])
 @login_required
 def get_all_exception_requests():
-    """
-    Get all exception requests (admin only)
-    """
     try:
         # Check if user is admin
         if not session.get('is_admin', False):
-            return jsonify({'error': 'Unauthorized'}), 403
-            
-        # Execute the script to get all requests
-        result = execute_prisma_script('get-all-exceptions')
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized'
+            }), 403
+
+        # Query to get all exception requests
+        query = """
+        SELECT 
+            ID, ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
+            RequesterJobDescription, RequesterEmail, RequesterPhone,
+            DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
+            DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail,
+            DepartmentHeadPhone, ApproverUsername, DataClassification,
+            ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
+            Vulnerabilities, Justification, Mitigation, TermsAccepted,
+            Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt
+        FROM VulnerabilityExceptionRequests
+        ORDER BY CreatedAt DESC
+        """
         
-        if 'error' in result:
-            return jsonify({'error': result['error']}), 500
-            
-        return jsonify(result), 200
+        results = execute_query(query)
+        
+        # Format the results
+        requests = []
+        for row in results:
+            request = {
+                'id': row[0],
+                'serverName': row[1],
+                'requesterFirstName': row[2],
+                'requesterLastName': row[3],
+                'requesterDepartment': row[4],
+                'requesterJobDescription': row[5],
+                'requesterEmail': row[6],
+                'requesterPhone': row[7],
+                'departmentHeadUsername': row[8],
+                'departmentHeadFirstName': row[9],
+                'departmentHeadLastName': row[10],
+                'departmentHeadDepartment': row[11],
+                'departmentHeadJobDescription': row[12],
+                'departmentHeadEmail': row[13],
+                'departmentHeadPhone': row[14],
+                'approverUsername': row[15],
+                'dataClassification': row[16],
+                'exceptionDurationType': row[17],
+                'expirationDate': row[18],
+                'usersAffected': row[19],
+                'dataAtRisk': row[20],
+                'vulnerabilities': row[21],
+                'justification': row[22],
+                'mitigation': row[23],
+                'termsAccepted': row[24],
+                'status': row[25],
+                'declineReason': row[26],
+                'requestedBy': row[27],
+                'requestedDate': row[28],
+                'createdAt': row[29],
+                'updatedAt': row[30]
+            }
+            requests.append(request)
+        
+        return jsonify(requests), 200
+        
     except Exception as e:
-        logging.error(f"Error getting all exception requests: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logging.error(f"Error fetching all exception requests: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching all exception requests: {str(e)}'
+        }), 500
 
 @app.route('/api/exception-requests/<int:request_id>', methods=['PUT'])
 @login_required

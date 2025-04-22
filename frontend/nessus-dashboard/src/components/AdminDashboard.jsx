@@ -108,13 +108,10 @@ const AdminDashboard = () => {
     );
   };
 
-  // Format timestamp
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'N/A';
     try {
-      // Check if timestamp is in seconds (Nessus API) or milliseconds
-      const timestampMs = timestamp.toString().length === 10 ? timestamp * 1000 : timestamp;
-      const date = new Date(timestampMs);
+      const date = new Date(timestamp);
       if (isNaN(date.getTime())) return 'Invalid Date';
       return date.toLocaleString();
     } catch (error) {
@@ -128,43 +125,84 @@ const AdminDashboard = () => {
       title: 'Server Name',
       dataIndex: 'serverName',
       key: 'serverName',
-      render: (text, record) => <a onClick={() => handleViewDetails(record)}>{text}</a>,
+      sorter: (a, b) => a.serverName.localeCompare(b.serverName)
+    },
+    {
+      title: 'Requester',
+      dataIndex: 'requesterEmail',
+      key: 'requesterEmail',
+      render: (email, record) => (
+        <span>
+          {record.requesterFirstName} {record.requesterLastName}
+          <br />
+          <Text type="secondary">{email}</Text>
+        </span>
+      )
+    },
+    {
+      title: 'Department',
+      dataIndex: 'requesterDepartment',
+      key: 'requesterDepartment'
     },
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
       render: (status) => getStatusTag(status),
-    },
-    {
-      title: 'Requested By',
-      dataIndex: 'requestedBy',
-      key: 'requestedBy',
+      filters: [
+        { text: 'Approved', value: 'approved' },
+        { text: 'Pending', value: 'pending' },
+        { text: 'Declined', value: 'declined' }
+      ],
+      onFilter: (value, record) => record.status === value
     },
     {
       title: 'Request Date',
       dataIndex: 'requestedDate',
       key: 'requestedDate',
       render: (date) => formatTimestamp(date),
+      sorter: (a, b) => new Date(a.requestedDate) - new Date(b.requestedDate)
     },
     {
       title: 'Expiration Date',
       dataIndex: 'expirationDate',
       key: 'expirationDate',
       render: (date) => formatTimestamp(date),
+      sorter: (a, b) => {
+        if (!a.expirationDate) return 1;
+        if (!b.expirationDate) return -1;
+        return new Date(a.expirationDate) - new Date(b.expirationDate);
+      }
     },
     {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
-        <Button 
-          type="link"
-          onClick={() => handleViewDetails(record)}
-        >
-          View Details
-        </Button>
-      ),
-    },
+        <Space size="small">
+          <Button 
+            type="text" 
+            icon={<FileTextOutlined />} 
+            onClick={() => handleViewDetails(record)}
+          />
+          {record.status === 'pending' && (
+            <>
+              <Button 
+                type="text" 
+                icon={<CheckCircleOutlined />} 
+                onClick={() => handleApprove(record)}
+                style={{ color: '#52c41a' }}
+              />
+              <Button 
+                type="text" 
+                icon={<CloseCircleOutlined />} 
+                onClick={() => handleDecline(record)}
+                style={{ color: '#ff4d4f' }}
+              />
+            </>
+          )}
+        </Space>
+      )
+    }
   ];
 
   const items = [
@@ -207,8 +245,15 @@ const AdminDashboard = () => {
                 </div>
                 
                 <div className="mb-4">
-                  <Text strong>Requested By: </Text>
-                  <Text>{selectedRequest.requestedBy}</Text>
+                  <Text strong>Requester: </Text>
+                  <Text>{selectedRequest.requesterFirstName} {selectedRequest.requesterLastName}</Text>
+                  <br />
+                  <Text type="secondary">{selectedRequest.requesterEmail}</Text>
+                </div>
+                
+                <div className="mb-4">
+                  <Text strong>Department: </Text>
+                  <Text>{selectedRequest.requesterDepartment}</Text>
                 </div>
                 
                 <div className="mb-4">
@@ -224,64 +269,83 @@ const AdminDashboard = () => {
                 <div className="mb-4">
                   <Text strong>Vulnerabilities: </Text>
                   <div>
-                    {selectedRequest.vulnerabilities.map((vuln, index) => (
-                      <Tag key={index}>{vuln}</Tag>
-                    ))}
+                    {typeof selectedRequest.vulnerabilities === 'string' 
+                      ? JSON.parse(selectedRequest.vulnerabilities).map(vuln => (
+                          <Tag key={vuln.id || vuln} color="orange" style={{ marginBottom: '4px' }}>
+                            {vuln.name || vuln}
+                          </Tag>
+                        ))
+                      : selectedRequest.vulnerabilities.map(vuln => (
+                          <Tag key={vuln.id || vuln} color="orange" style={{ marginBottom: '4px' }}>
+                            {vuln.name || vuln}
+                          </Tag>
+                        ))
+                    }
                   </div>
                 </div>
                 
                 <div className="mb-4">
                   <Text strong>Justification: </Text>
-                  <p>{selectedRequest.justification}</p>
+                  <div>{selectedRequest.justification}</div>
                 </div>
                 
                 <div className="mb-4">
                   <Text strong>Mitigation Measures: </Text>
-                  <p>{selectedRequest.mitigation}</p>
+                  <div>{selectedRequest.mitigation}</div>
                 </div>
-
+                
                 {selectedRequest.status === 'pending' && (
-                  <div className="mt-6">
-                    {showDeclineForm && (
-                      <div className="mb-4">
+                  <div className="mt-4">
+                    {!showDeclineForm ? (
+                      <Space>
+                        <Button 
+                          type="primary" 
+                          icon={<CheckCircleOutlined />}
+                          onClick={handleApprove}
+                          loading={updating}
+                        >
+                          Approve
+                        </Button>
+                        <Button 
+                          danger 
+                          icon={<CloseCircleOutlined />}
+                          onClick={handleDecline}
+                          loading={updating}
+                        >
+                          Decline
+                        </Button>
+                      </Space>
+                    ) : (
+                      <div>
                         <TextArea
                           rows={4}
-                          placeholder="Reason for declining (required)"
+                          placeholder="Enter reason for declining"
                           value={declineReason}
                           onChange={(e) => setDeclineReason(e.target.value)}
+                          className="mb-4"
                         />
+                        <Space>
+                          <Button 
+                            danger 
+                            icon={<CloseCircleOutlined />}
+                            onClick={handleDecline}
+                            loading={updating}
+                          >
+                            Confirm Decline
+                          </Button>
+                          <Button onClick={() => setShowDeclineForm(false)}>
+                            Cancel
+                          </Button>
+                        </Space>
                       </div>
                     )}
-                    <div className="flex justify-end space-x-4">
-                      <Button 
-                        type="primary" 
-                        onClick={handleApprove}
-                        loading={updating}
-                      >
-                        Approve
-                      </Button>
-                      <Button 
-                        danger 
-                        onClick={handleDecline}
-                        loading={updating}
-                      >
-                        {showDeclineForm ? 'Submit Decline' : 'Decline'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {selectedRequest.status === 'declined' && selectedRequest.declineReason && (
-                  <div className="mt-4">
-                    <Text strong>Decline Reason: </Text>
-                    <p className="text-red-500">{selectedRequest.declineReason}</p>
                   </div>
                 )}
               </div>
             )}
           </Modal>
         </div>
-      ),
+      )
     },
     {
       key: 'external-scans',

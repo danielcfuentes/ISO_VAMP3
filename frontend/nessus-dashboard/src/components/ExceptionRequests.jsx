@@ -36,18 +36,7 @@ const ExceptionRequests = () => {
   
   // Get user info and fetch exception requests from the API
   useEffect(() => {
-    // Check if user is logged in and get the username
-    const checkSession = async () => {
-      try {
-        // You could make an API call here to get session info if needed
-        // For now, we'll just show the requests
-        fetchExceptionRequests();
-      } catch (error) {
-        console.error('Error checking session:', error);
-      }
-    };
-    
-    checkSession();
+    fetchExceptionRequests();
   }, []);
   
   const fetchExceptionRequests = async () => {
@@ -72,11 +61,9 @@ const ExceptionRequests = () => {
     }
   };
   
-  const handleOpenModal = (mode, request = null) => {
-    if (mode === 'view') {
-      setSelectedRequest(request);
-      setViewModalVisible(true);
-    }
+  const handleOpenModal = (request) => {
+    setSelectedRequest(request);
+    setViewModalVisible(true);
   };
   
   const handleStandardSubmit = async (values) => {
@@ -134,9 +121,7 @@ const ExceptionRequests = () => {
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'N/A';
     try {
-      // Check if timestamp is in seconds (Nessus API) or milliseconds
-      const timestampMs = timestamp.toString().length === 10 ? timestamp * 1000 : timestamp;
-      const date = new Date(timestampMs);
+      const date = new Date(timestamp);
       if (isNaN(date.getTime())) return 'Invalid Date';
       return date.toLocaleString();
     } catch (error) {
@@ -186,15 +171,23 @@ const ExceptionRequests = () => {
       title: 'Vulnerabilities',
       dataIndex: 'vulnerabilities',
       key: 'vulnerabilities',
-      render: vulns => (
-        <span>
-          {vulns.map(vuln => (
-            <Tag key={vuln} color="orange" style={{ marginBottom: '4px' }}>
-              {vuln}
-            </Tag>
-          ))}
-        </span>
-      )
+      render: vulns => {
+        try {
+          const vulnerabilities = typeof vulns === 'string' ? JSON.parse(vulns) : vulns;
+          return (
+            <span>
+              {vulnerabilities.map(vuln => (
+                <Tag key={vuln.id || vuln} color="orange" style={{ marginBottom: '4px' }}>
+                  {vuln.name || vuln}
+                </Tag>
+              ))}
+            </span>
+          );
+        } catch (error) {
+          console.error('Error rendering vulnerabilities:', error);
+          return 'Error displaying vulnerabilities';
+        }
+      }
     },
     {
       title: 'Actions',
@@ -205,7 +198,7 @@ const ExceptionRequests = () => {
             <Button 
               type="text" 
               icon={<FileTextOutlined />} 
-              onClick={() => handleOpenModal('view', record)} 
+              onClick={() => handleOpenModal(record)} 
             />
           </Tooltip>
         </Space>
@@ -321,11 +314,18 @@ const ExceptionRequests = () => {
               <div>
                 <Text strong>Vulnerabilities:</Text>
                 <div>
-                  {selectedRequest.vulnerabilities.map(vuln => (
-                    <Tag key={vuln} color="orange" style={{ marginBottom: '4px' }}>
-                      {vuln}
-                    </Tag>
-                  ))}
+                  {typeof selectedRequest.vulnerabilities === 'string' 
+                    ? JSON.parse(selectedRequest.vulnerabilities).map(vuln => (
+                        <Tag key={vuln.id || vuln} color="orange" style={{ marginBottom: '4px' }}>
+                          {vuln.name || vuln}
+                        </Tag>
+                      ))
+                    : selectedRequest.vulnerabilities.map(vuln => (
+                        <Tag key={vuln.id || vuln} color="orange" style={{ marginBottom: '4px' }}>
+                          {vuln.name || vuln}
+                        </Tag>
+                      ))
+                  }
                 </div>
               </div>
             </div>
