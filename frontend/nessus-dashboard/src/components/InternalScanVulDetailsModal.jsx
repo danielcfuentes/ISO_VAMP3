@@ -86,7 +86,16 @@ const InternalScanVulDetailsModal = ({
   // Format timestamp for display
   const formatTimestamp = (timestamp) => {
     if (!timestamp || timestamp === 'N/A') return 'N/A';
-    return new Date(timestamp).toLocaleString();
+    try {
+      // Check if timestamp is in seconds (Nessus API) or milliseconds
+      const timestampMs = timestamp.toString().length === 10 ? timestamp * 1000 : timestamp;
+      const date = new Date(timestampMs);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      return date.toLocaleString();
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid Date';
+    }
   };
 
   // Get status tag component

@@ -143,6 +143,21 @@ const ExceptionRequests = () => {
     );
   };
   
+  // Format timestamp
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    try {
+      // Check if timestamp is in seconds (Nessus API) or milliseconds
+      const timestampMs = timestamp.toString().length === 10 ? timestamp * 1000 : timestamp;
+      const date = new Date(timestampMs);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      return date.toLocaleString();
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid Date';
+    }
+  };
+
   const columns = [
     {
       title: 'Server Name',
@@ -171,13 +186,14 @@ const ExceptionRequests = () => {
       title: 'Request Date',
       dataIndex: 'requestedDate',
       key: 'requestedDate',
+      render: (date) => formatTimestamp(date),
       sorter: (a, b) => new Date(a.requestedDate) - new Date(b.requestedDate)
     },
     {
       title: 'Expiration Date',
       dataIndex: 'expirationDate',
       key: 'expirationDate',
-      render: date => date || 'N/A',
+      render: (date) => formatTimestamp(date),
       sorter: (a, b) => {
         if (!a.expirationDate) return 1;
         if (!b.expirationDate) return -1;
@@ -317,11 +333,11 @@ const ExceptionRequests = () => {
               </div>
               <div>
                 <Text strong>Request Date:</Text>
-                <div>{selectedRequest.requestedDate}</div>
+                <div>{formatTimestamp(selectedRequest.requestedDate)}</div>
               </div>
               <div>
                 <Text strong>Expiration Date:</Text>
-                <div>{selectedRequest.expirationDate || 'N/A'}</div>
+                <div>{formatTimestamp(selectedRequest.expirationDate)}</div>
               </div>
               <div>
                 <Text strong>Vulnerabilities:</Text>

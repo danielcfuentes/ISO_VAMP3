@@ -108,6 +108,21 @@ const AdminDashboard = () => {
     );
   };
 
+  // Format timestamp
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    try {
+      // Check if timestamp is in seconds (Nessus API) or milliseconds
+      const timestampMs = timestamp.toString().length === 10 ? timestamp * 1000 : timestamp;
+      const date = new Date(timestampMs);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      return date.toLocaleString();
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid Date';
+    }
+  };
+
   const columns = [
     {
       title: 'Server Name',
@@ -130,13 +145,13 @@ const AdminDashboard = () => {
       title: 'Request Date',
       dataIndex: 'requestedDate',
       key: 'requestedDate',
-      render: (date) => moment(date).format('YYYY-MM-DD'),
+      render: (date) => formatTimestamp(date),
     },
     {
       title: 'Expiration Date',
       dataIndex: 'expirationDate',
       key: 'expirationDate',
-      render: (date) => moment(date).format('YYYY-MM-DD'),
+      render: (date) => formatTimestamp(date),
     },
     {
       title: 'Actions',
@@ -198,12 +213,12 @@ const AdminDashboard = () => {
                 
                 <div className="mb-4">
                   <Text strong>Request Date: </Text>
-                  <Text>{moment(selectedRequest.requestedDate).format('YYYY-MM-DD')}</Text>
+                  <Text>{formatTimestamp(selectedRequest.requestedDate)}</Text>
                 </div>
                 
                 <div className="mb-4">
                   <Text strong>Expiration Date: </Text>
-                  <Text>{moment(selectedRequest.expirationDate).format('YYYY-MM-DD')}</Text>
+                  <Text>{formatTimestamp(selectedRequest.expirationDate)}</Text>
                 </div>
                 
                 <div className="mb-4">
