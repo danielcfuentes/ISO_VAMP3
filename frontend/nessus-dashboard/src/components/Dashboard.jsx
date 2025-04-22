@@ -618,25 +618,6 @@ const Dashboard = () => {
         },
       },
       {
-        title: 'Vulnerabilities',
-        key: 'vulnerabilities',
-        render: (_, record) => {
-          const scanState = externalScanStates[record.name];
-          if (!scanState?.hosts?.length) return '-';
-          
-          const host = scanState.hosts[0];
-          return (
-            <Space>
-              {host.critical > 0 && <Tag color="red">{host.critical} Critical</Tag>}
-              {host.high > 0 && <Tag color="orange">{host.high} High</Tag>}
-              {host.medium > 0 && <Tag color="gold">{host.medium} Medium</Tag>}
-              {host.low > 0 && <Tag color="blue">{host.low} Low</Tag>}
-              {host.info > 0 && <Tag color="default">{host.info} Info</Tag>}
-            </Space>
-          );
-        },
-      },
-      {
         title: 'Actions',
         key: 'actions',
         render: (_, record) => (
@@ -661,7 +642,6 @@ const Dashboard = () => {
               <Button
                 icon={<DeleteOutlined />}
                 onClick={() => handleDeleteClick(record)}
-                
                 danger
               />
             </Tooltip>
