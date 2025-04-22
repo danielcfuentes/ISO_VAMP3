@@ -23,7 +23,17 @@ const Dashboard = () => {
   const [selectedScanForVul, setSelectedScanForVul] = useState(null);
   const [activeTab, setActiveTab] = useState('internal');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [scanStatusLoading, setScanStatusLoading] = useState({});
   const username = localStorage.getItem('username') || 'HOSTNAME';
+
+  // Initialize loading state for all servers when servers list changes
+  useEffect(() => {
+    const initialLoadingState = {};
+    servers.forEach(server => {
+      initialLoadingState[server.name] = true;
+    });
+    setScanStatusLoading(initialLoadingState);
+  }, [servers]);
 
   // Fetch initial scan states when component mounts
   useEffect(() => {
@@ -33,34 +43,53 @@ const Dashboard = () => {
         const updatedExternalStates = {};
         
         for (const server of servers) {
-          // Fetch internal scan state
-          const internalScan = await nessusService.findScanByServerName(server.name);
-          if (internalScan) {
-            const status = await nessusService.getScanStatus(internalScan.id);
-            updatedInternalStates[server.name] = {
-              scanId: internalScan.id,
-              status: status.status,
-              progress: status.progress || 0
-            };
-          }
+          try {
+            // Fetch internal scan state
+            const internalScan = await nessusService.findScanByServerName(server.name);
+            if (internalScan) {
+              const status = await nessusService.getScanStatus(internalScan.id);
+              updatedInternalStates[server.name] = {
+                scanId: internalScan.id,
+                status: status.status,
+                progress: status.progress || 0
+              };
+            }
 
-          // Fetch external scan state (new separate handling)
-          const externalScans = await nessusService.getExternalScans();
-          const serverExternalScan = externalScans.find(scan => scan.name === server.name);
-          if (serverExternalScan) {
-            updatedExternalStates[server.name] = {
-              scanId: serverExternalScan.id,
-              status: serverExternalScan.status,
-              progress: 0,
-              startTime: serverExternalScan.start_time,
-              endTime: serverExternalScan.end_time,
-              hosts: serverExternalScan.hosts
-            };
+            // Fetch external scan state
+            const externalScans = await nessusService.getExternalScans();
+            const serverExternalScan = externalScans.find(scan => scan.name === server.name);
+            if (serverExternalScan) {
+              updatedExternalStates[server.name] = {
+                scanId: serverExternalScan.id,
+                status: serverExternalScan.status,
+                progress: 0,
+                startTime: serverExternalScan.start_time,
+                endTime: serverExternalScan.end_time,
+                hosts: serverExternalScan.hosts
+              };
+            }
+
+            // Update states and loading for this server immediately
+            setInternalScanStates(prev => ({
+              ...prev,
+              [server.name]: updatedInternalStates[server.name]
+            }));
+            setExternalScanStates(prev => ({
+              ...prev,
+              [server.name]: updatedExternalStates[server.name]
+            }));
+            setScanStatusLoading(prev => ({
+              ...prev,
+              [server.name]: false
+            }));
+          } catch (error) {
+            console.error(`Error fetching scan state for ${server.name}:`, error);
+            setScanStatusLoading(prev => ({
+              ...prev,
+              [server.name]: false
+            }));
           }
         }
-        
-        setInternalScanStates(updatedInternalStates);
-        setExternalScanStates(updatedExternalStates);
       } catch (error) {
         console.error('Error fetching initial scan states:', error);
       }
@@ -476,8 +505,15 @@ const Dashboard = () => {
         key: 'scanStatus',
         render: (_, record) => {
           const scanState = scanStates[record.name];
+          const isLoading = scanStatusLoading[record.name];
           
-          if (!scanState) return <Tag>No Scan</Tag>;
+          if (isLoading) {
+            return <Tag>Loading...</Tag>;
+          }
+          
+          if (!scanState) {
+            return <Tag>No Scan</Tag>;
+          }
           
           const statusColors = {
             running: 'processing',
@@ -555,8 +591,15 @@ const Dashboard = () => {
         key: 'scanStatus',
         render: (_, record) => {
           const scanState = externalScanStates[record.name];
+          const isLoading = scanStatusLoading[record.name];
           
-          if (!scanState) return <Tag>No Scan</Tag>;
+          if (isLoading) {
+            return <Tag>Loading...</Tag>;
+          }
+          
+          if (!scanState) {
+            return <Tag>No Scan</Tag>;
+          }
           
           const statusColors = {
             running: 'processing',
