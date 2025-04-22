@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { 
   Modal, Button, Typography, Divider, Table, Tag, Space, 
   Alert, Tabs, Collapse, Descriptions, Badge, Progress, Spin, message 
@@ -31,7 +32,8 @@ const InternalScanVulDetailsModal = ({
   onClose, 
   onDownload, 
   downloadLoading,
-  isExternal = false
+  isExternal = false,
+  servers = []
 }) => {
   const [vulnerabilityData, setVulnerabilityData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -150,9 +152,6 @@ const InternalScanVulDetailsModal = ({
           <Descriptions.Item label="Scan Name">{scan.name}</Descriptions.Item>
           <Descriptions.Item label="Status">{getStatusTag(scan.status)}</Descriptions.Item>
           <Descriptions.Item label="Scan ID">{scan.id}</Descriptions.Item>
-          <Descriptions.Item label="Target">{vulnerabilityData?.targets || scan.name}</Descriptions.Item>
-          <Descriptions.Item label="Start Time">{formatTimestamp(scan.start_time)}</Descriptions.Item>
-          <Descriptions.Item label="End Time">{formatTimestamp(scan.end_time)}</Descriptions.Item>
         </Descriptions>
       </div>
     );
@@ -238,11 +237,6 @@ const InternalScanVulDetailsModal = ({
         title: 'Hostname',
         dataIndex: 'hostname',
         key: 'hostname',
-      },
-      {
-        title: 'IP Address',
-        dataIndex: 'ip',
-        key: 'ip',
       },
       {
         title: 'Critical',
@@ -475,7 +469,7 @@ const InternalScanVulDetailsModal = ({
 
   return (
     <Modal
-      title={<div style={{ fontSize: '18px', fontWeight: 500 }}>Internal Scan Details: {scan?.name}</div>}
+      title={<div style={{ fontSize: '18px', fontWeight: 500 }}>Scan Details: {scan?.name}</div>}
       open={visible}
       onCancel={onClose}
       width={1000}
@@ -610,6 +604,25 @@ const InternalScanVulDetailsModal = ({
       )}
     </Modal>
   );
+};
+
+InternalScanVulDetailsModal.propTypes = {
+  visible: PropTypes.bool.isRequired,
+  scan: PropTypes.shape({
+    id: PropTypes.string,
+    name: PropTypes.string,
+    status: PropTypes.string,
+    start_time: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    end_time: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
+  }),
+  onClose: PropTypes.func.isRequired,
+  onDownload: PropTypes.func.isRequired,
+  downloadLoading: PropTypes.bool,
+  isExternal: PropTypes.bool,
+  servers: PropTypes.arrayOf(PropTypes.shape({
+    name: PropTypes.string,
+    ipAddress: PropTypes.string
+  }))
 };
 
 export default InternalScanVulDetailsModal; 

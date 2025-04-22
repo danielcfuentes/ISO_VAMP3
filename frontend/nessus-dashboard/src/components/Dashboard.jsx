@@ -39,45 +39,50 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchInitialScanStates = async () => {
       try {
-        const updatedInternalStates = {};
-        const updatedExternalStates = {};
+        const isExternal = activeTab === 'external';
+        const updatedStates = {};
         
         for (const server of servers) {
           try {
-            // Fetch internal scan state
-            const internalScan = await nessusService.findScanByServerName(server.name);
-            if (internalScan) {
-              const status = await nessusService.getScanStatus(internalScan.id);
-              updatedInternalStates[server.name] = {
-                scanId: internalScan.id,
-                status: status.status,
-                progress: status.progress || 0
-              };
-            }
-
-            // Fetch external scan state
-            const externalScans = await nessusService.getExternalScans();
-            const serverExternalScan = externalScans.find(scan => scan.name === server.name);
-            if (serverExternalScan) {
-              updatedExternalStates[server.name] = {
-                scanId: serverExternalScan.id,
-                status: serverExternalScan.status,
-                progress: 0,
-                startTime: serverExternalScan.start_time,
-                endTime: serverExternalScan.end_time,
-                hosts: serverExternalScan.hosts
-              };
+            if (isExternal) {
+              // Only fetch external scan state for external tab
+              const externalScans = await nessusService.getExternalScans();
+              const serverExternalScan = externalScans.find(scan => scan.name === server.name);
+              if (serverExternalScan) {
+                updatedStates[server.name] = {
+                  scanId: serverExternalScan.id,
+                  status: serverExternalScan.status,
+                  progress: 0,
+                  startTime: serverExternalScan.start_time,
+                  endTime: serverExternalScan.end_time,
+                  hosts: serverExternalScan.hosts
+                };
+              }
+            } else {
+              // Only fetch internal scan state for internal tab
+              const internalScan = await nessusService.findScanByServerName(server.name);
+              if (internalScan) {
+                const status = await nessusService.getScanStatus(internalScan.id);
+                updatedStates[server.name] = {
+                  scanId: internalScan.id,
+                  status: status.status,
+                  progress: status.progress || 0
+                };
+              }
             }
 
             // Update states and loading for this server immediately
-            setInternalScanStates(prev => ({
-              ...prev,
-              [server.name]: updatedInternalStates[server.name]
-            }));
-            setExternalScanStates(prev => ({
-              ...prev,
-              [server.name]: updatedExternalStates[server.name]
-            }));
+            if (isExternal) {
+              setExternalScanStates(prev => ({
+                ...prev,
+                [server.name]: updatedStates[server.name]
+              }));
+            } else {
+              setInternalScanStates(prev => ({
+                ...prev,
+                [server.name]: updatedStates[server.name]
+              }));
+            }
             setScanStatusLoading(prev => ({
               ...prev,
               [server.name]: false
@@ -98,7 +103,7 @@ const Dashboard = () => {
     if (servers.length > 0) {
       fetchInitialScanStates();
     }
-  }, [servers]);
+  }, [servers, activeTab]);
 
   // Clean up intervals on unmount
   useEffect(() => {
@@ -732,6 +737,7 @@ const Dashboard = () => {
           onDownload={handleDownloadReport}
           downloadLoading={downloadLoading[selectedScanForVul?.name]}
           isExternal={activeTab === 'external'}
+          servers={servers}
         />
       </Content>
     </Layout>
