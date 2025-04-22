@@ -12,9 +12,10 @@ import time
 import json
 import io
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import subprocess
+from database.sql_server_config import execute_query
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -1628,83 +1629,143 @@ def get_external_scan_history(server_name):
 # =============================================================================
 
 @app.route('/api/exception-requests', methods=['POST'])
-@login_required
 def create_exception_request():
-    """
-    Create a new exception request in the database
-    """
     try:
-        data = request.json
-        logging.info(f"Received raw exception request data: {data}")
-        
-        # Handle malformed data
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'message': 'Request must be JSON'
+            }), 400
+
+        data = request.get_json()
         if not data:
-            return jsonify({'error': 'No data provided'}), 400
-            
-        # Check required fields
-        if not data.get('serverName'):
-            return jsonify({'error': 'Server name is required'}), 400
-            
-        # Extract date from potentially complex object
-        expiration_date = data.get('expirationDate')
-        if isinstance(expiration_date, dict) and 'd' in expiration_date:
-            # Handle dayjs object format
-            date_str = expiration_date.get('d')
-            if date_str:
-                # Try to extract date from string like "Wed Apr 23 2025 00:00:00 GMT-0600"
-                try:
-                    from datetime import datetime
-                    # Extract just the date portion "Apr 23 2025"
-                    date_parts = date_str.split(' ')
-                    if len(date_parts) >= 4:
-                        month = date_parts[1]
-                        day = date_parts[2]
-                        year = date_parts[3]
-                        expiration_date = f"{year}-{month}-{day}"
-                except Exception as date_error:
-                    logging.error(f"Error parsing date object: {date_error}")
-                    # Fallback to using a default date
-                    expiration_date = "2025-12-31"
-            else:
-                expiration_date = "2025-12-31"  # Default if we can't parse
+            return jsonify({
+                'success': False,
+                'message': 'No data provided'
+            }), 400
+
+        # Validate required fields
+        required_fields = [
+            'serverName', 'requesterFirstName', 'requesterLastName', 'requesterDepartment',
+            'requesterJobDescription', 'requesterEmail', 'requesterPhone',
+            'approverFirstName', 'approverLastName',
+            'approverDepartment', 'approverJobDescription', 'approverEmail',
+            'approverPhone', 'dataClassification', 'exceptionDurationType',
+            'usersAffected', 'dataAtRisk', 'justification', 'mitigation',
+            'termsAccepted'
+        ]
+
+        missing_fields = [field for field in required_fields if not data.get(field)]
+        if missing_fields:
+            return jsonify({
+                'success': False,
+                'message': f'Missing required fields: {", ".join(missing_fields)}'
+            }), 400
         
-        # Process vulnerabilities - handle both string arrays and object arrays
-        vulnerabilities = data.get('vulnerabilities', [])
-        processed_vulnerabilities = []
+        # Calculate expiration date based on duration type
+        duration_type = data.get('exceptionDurationType')
+        if duration_type == 'custom':
+            expiration_date = data.get('customExpirationDate')
+            if not expiration_date:
+                return jsonify({
+                    'success': False,
+                    'message': 'Custom expiration date is required when duration type is custom'
+                }), 400
+        else:
+            try:
+                duration_months = int(duration_type)
+                expiration_date = (datetime.now() + timedelta(days=30 * duration_months)).strftime('%Y-%m-%d')
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'message': 'Invalid duration type'
+                }), 400
         
-        logging.info(f"Processing vulnerabilities: {vulnerabilities}")
+        # Convert vulnerabilities array to JSON string
+        vulnerabilities_json = json.dumps(data.get('vulnerabilities', []))
         
-        for vuln in vulnerabilities:
-            if isinstance(vuln, str):
-                processed_vulnerabilities.append(vuln)
-            elif isinstance(vuln, dict):
-                # If it's an object, extract the name or fall back to ID
-                name = vuln.get('name') or vuln.get('plugin_name') or f"Vulnerability ID: {vuln.get('id') or vuln.get('plugin_id')}"
-                processed_vulnerabilities.append(name)
+        # Prepare the insert query
+        query = """
+        INSERT INTO VulnerabilityExceptionRequests (
+            ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
+            RequesterJobDescription, RequesterEmail, RequesterPhone,
+            DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
+            DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail,
+            DepartmentHeadPhone, ApproverUsername, DataClassification,
+            ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
+            Vulnerabilities, Justification, Mitigation, TermsAccepted,
+            Status, RequestedBy, RequestedDate, CreatedAt, UpdatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), GETDATE(), GETDATE())
+        """
         
-        # Format the data for the database
-        exception_data = {
-            'serverName': data.get('serverName'),
-            'vulnerabilities': processed_vulnerabilities,
-            'justification': data.get('justification') or "No justification provided",
-            'mitigation': data.get('mitigation') or "No mitigation provided",
-            'expirationDate': expiration_date,
-            'requestedBy': session.get('username', 'unknown')
-        }
+        # Parameters in order:
+        # 1. serverName
+        # 2. requesterFirstName
+        # 3. requesterLastName
+        # 4. requesterDepartment
+        # 5. requesterJobDescription
+        # 6. requesterEmail
+        # 7. requesterPhone
+        # 8. approverUsername
+        # 9. approverFirstName
+        # 10. approverLastName
+        # 11. approverDepartment
+        # 12. approverJobDescription
+        # 13. approverEmail
+        # 14. approverPhone
+        # 15. dataClassification
+        # 16. duration_type
+        # 17. expiration_date
+        # 18. usersAffected
+        # 19. dataAtRisk
+        # 20. vulnerabilities_json
+        # 21. justification
+        # 22. mitigation
+        # 23. termsAccepted
+        # 24. status
+        # 25. requestedBy
         
-        logging.info(f"Creating exception request with formatted data: {exception_data}")
+        params = (
+            data.get('serverName'),
+            data.get('requesterFirstName'),
+            data.get('requesterLastName'),
+            data.get('requesterDepartment'),
+            data.get('requesterJobDescription'),
+            data.get('requesterEmail'),
+            data.get('requesterPhone'),
+            data.get('approverUsername'),
+            data.get('approverFirstName'),
+            data.get('approverLastName'),
+            data.get('approverDepartment'),
+            data.get('approverJobDescription'),
+            data.get('approverEmail'),
+            data.get('approverPhone'),
+            data.get('dataClassification'),
+            duration_type,
+            expiration_date,
+            data.get('usersAffected'),
+            data.get('dataAtRisk'),
+            vulnerabilities_json,
+            data.get('justification'),
+            data.get('mitigation'),
+            data.get('termsAccepted'),
+            'Pending',
+            data.get('requesterEmail')
+        )
         
-        # Execute the script to create the exception request
-        result = execute_prisma_script('create-exception', exception_data)
+        execute_query(query, params)
         
-        if 'error' in result:
-            logging.error(f"Error in database script: {result['error']}")
-            return jsonify({'error': result['error']}), 500
-            
-        return jsonify(result), 201
+        return jsonify({
+            'success': True,
+            'message': 'Exception request submitted successfully'
+        }), 201
+        
     except Exception as e:
-        logging.error(f"Error creating exception request: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logging.error(f"Error submitting exception request: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error submitting exception request: {str(e)}'
+        }), 500
 
 @app.route('/api/exception-requests', methods=['GET'])
 @login_required

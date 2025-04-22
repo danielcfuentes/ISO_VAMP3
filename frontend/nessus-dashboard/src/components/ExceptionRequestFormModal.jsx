@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Modal, Form, Input, Button, Select, Typography, Alert, Space, Radio, DatePicker } from 'antd';
+import { Modal, Form, Input, Button, Select, Typography, Alert, Space, Radio, DatePicker, message } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
 
 const { TextArea } = Input;
@@ -19,8 +19,7 @@ const ExceptionRequestFormModal = ({
   visible, 
   onClose, 
   serverName, 
-  vulnerabilities = [], 
-  onSubmit
+  vulnerabilities = []
 }) => {
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
@@ -40,11 +39,45 @@ const ExceptionRequestFormModal = ({
   const handleSubmit = async (values) => {
     try {
       setSubmitting(true);
-      await onSubmit(values);
+      
+      // Prepare the data for submission
+      const formData = {
+        ...values,
+        vulnerabilities: vulnerabilities.map(vuln => ({
+          id: vuln.id,
+          name: vuln.name,
+          severity: vuln.severity,
+          description: vuln.description
+        }))
+      };
+      
+      // Send the request to the backend
+      const response = await fetch('http://localhost:5000/api/exception-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+      });
+      
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        console.error('Error parsing JSON response:', jsonError);
+        throw new Error('Invalid response from server');
+      }
+      
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to submit exception request');
+      }
+      
+      message.success('Exception request submitted successfully');
       onClose();
       form.resetFields();
     } catch (error) {
       console.error('Error submitting exception request:', error);
+      message.error(error.message || 'Failed to submit exception request');
     } finally {
       setSubmitting(false);
     }
@@ -323,6 +356,18 @@ const ExceptionRequestFormModal = ({
           <TextArea rows={4} />
         </Form.Item>
 
+        {/* Mitigation */}
+        <Form.Item
+          name="mitigation"
+          label="Mitigation Strategy"
+          rules={[
+            { required: true, message: 'Please provide a mitigation strategy' },
+            { min: 20, message: 'Mitigation strategy must be at least 20 characters' }
+          ]}
+        >
+          <TextArea rows={4} />
+        </Form.Item>
+
         {/* Terms and Conditions */}
         <Title level={4}>Terms and Conditions</Title>
         <div style={{ 
@@ -371,8 +416,7 @@ ExceptionRequestFormModal.propTypes = {
       plugin_name: PropTypes.string,
       name: PropTypes.string
     })
-  ),
-  onSubmit: PropTypes.func.isRequired
+  )
 };
 
 export default ExceptionRequestFormModal;
