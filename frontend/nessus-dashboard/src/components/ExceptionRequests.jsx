@@ -6,9 +6,6 @@ import {
   Space, 
   Button, 
   Modal, 
-  Form, 
-  Input, 
-  DatePicker, 
   message, 
   Tag, 
   Tooltip,
@@ -22,21 +19,19 @@ import {
   ClockCircleOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
+import StandardExceptionFormModal from './StandardExceptionFormModal';
 
 const { Title, Text, Paragraph } = Typography;
-const { TextArea } = Input;
 
 const API_URL = 'http://localhost:5000/api';
 
 const ExceptionRequests = () => {
-  const [form] = Form.useForm();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalMode, setModalMode] = useState('create');
+  const [standardModalVisible, setStandardModalVisible] = useState(false);
+  const [viewModalVisible, setViewModalVisible] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
   const [username, setUsername] = useState('');
   
   // Get user info and fetch exception requests from the API
@@ -78,29 +73,22 @@ const ExceptionRequests = () => {
   };
   
   const handleOpenModal = (mode, request = null) => {
-    setModalMode(mode);
-    setSelectedRequest(request);
-    
-    if (mode === 'create') {
-      form.resetFields();
+    if (mode === 'view') {
+      setSelectedRequest(request);
+      setViewModalVisible(true);
     }
-    
-    setModalVisible(true);
   };
   
-  const handleSubmit = async (values) => {
+  const handleStandardSubmit = async (values) => {
     setSubmitting(true);
-    setError(null);
-    
     try {
-      // Format the vulnerabilities data
+      // Format the data and submit
       const formattedData = {
         ...values,
-        vulnerabilities: values.vulnerabilities.split(',').map(v => v.trim()),
-        expirationDate: values.expirationDate.format('YYYY-MM-DD')
+        requestType: 'standard',
+        status: 'pending',
+        requestedDate: new Date().toISOString()
       };
-      
-      console.log("Submitting data:", formattedData);
 
       // Call the API to create the exception request
       await axios.post(`${API_URL}/exception-requests`, formattedData, {
@@ -108,13 +96,12 @@ const ExceptionRequests = () => {
       });
       
       // Success - refresh the list and close the modal
-      message.success('Exception request submitted successfully');
+      message.success('Standard exception request submitted successfully');
       fetchExceptionRequests();
-      setModalVisible(false);
-      form.resetFields();
+      setStandardModalVisible(false);
     } catch (err) {
-      console.error("Error submitting exception request:", err);
-      setError(err.response?.data?.error || "Failed to submit request. Please try again.");
+      console.error("Error submitting standard exception request:", err);
+      message.error(err.response?.data?.error || "Failed to submit request. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -226,11 +213,6 @@ const ExceptionRequests = () => {
     }
   ];
   
-  const modalTitle = {
-    'create': 'Create Exception Request',
-    'view': 'Exception Request Details'
-  };
-  
   return (
     <div className="p-6">
       <Card className="shadow-sm">
@@ -245,10 +227,10 @@ const ExceptionRequests = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => handleOpenModal('create')}
+            onClick={() => setStandardModalVisible(true)}
             style={{ backgroundColor: '#1890ff', borderColor: '#1890ff' }}
           >
-            New Exception Request
+            Create Standard Exception Request
           </Button>
         </div>
         
@@ -264,8 +246,6 @@ const ExceptionRequests = () => {
           showIcon
           className="mb-4"
         />
-        
-
         
         <Table
           columns={columns}
@@ -295,23 +275,31 @@ const ExceptionRequests = () => {
         />
       </Card>
       
+      {/* Standard Exception Form Modal */}
+      <StandardExceptionFormModal
+        visible={standardModalVisible}
+        onClose={() => setStandardModalVisible(false)}
+        onSubmit={handleStandardSubmit}
+      />
+      
+      {/* View Request Modal */}
       <Modal
         title={
           <Space>
             <FileTextOutlined />
-            {modalTitle[modalMode]}
+            Exception Request Details
           </Space>
         }
-        open={modalVisible}
-        onCancel={() => setModalVisible(false)}
-        footer={modalMode === 'view' ? [
-          <Button key="close" onClick={() => setModalVisible(false)}>
+        open={viewModalVisible}
+        onCancel={() => setViewModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setViewModalVisible(false)}>
             Close
           </Button>
-        ] : null}
+        ]}
         width={700}
       >
-        {modalMode === 'view' && selectedRequest ? (
+        {selectedRequest && (
           <div className="p-2">
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
@@ -352,86 +340,6 @@ const ExceptionRequests = () => {
               <div>{selectedRequest.mitigation}</div>
             </div>
           </div>
-        ) : (
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={handleSubmit}
-          >
-            <Form.Item
-              name="serverName"
-              label="Server Name"
-              rules={[
-                { required: true, message: 'Please enter the server name' },
-                { min: 3, message: 'Server name must be at least 3 characters' }
-              ]}
-            >
-              <Input placeholder="Enter server name" />
-            </Form.Item>
-            
-            <Form.Item
-              name="vulnerabilities"
-              label="Vulnerabilities (comma separated)"
-              rules={[
-                { required: true, message: 'Please enter the vulnerabilities' }
-              ]}
-            >
-              <Input placeholder="e.g., CVE-2024-1234, CVE-2024-5678" />
-            </Form.Item>
-            
-            <Form.Item
-              name="justification"
-              label="Justification"
-              rules={[
-                { required: true, message: 'Please provide justification' },
-                { min: 20, message: 'Justification must be at least 20 characters' }
-              ]}
-            >
-              <TextArea 
-                placeholder="Explain why these vulnerabilities cannot be remediated"
-                rows={4}
-              />
-            </Form.Item>
-            
-            <Form.Item
-              name="mitigation"
-              label="Mitigation Measures"
-              rules={[
-                { required: true, message: 'Please provide mitigation measures' },
-                { min: 20, message: 'Mitigation measures must be at least 20 characters' }
-              ]}
-            >
-              <TextArea 
-                placeholder="Describe the compensating controls and mitigation strategies"
-                rows={4}
-              />
-            </Form.Item>
-            
-            <Form.Item
-              name="expirationDate"
-              label="Requested Expiration Date"
-              rules={[
-                { required: true, message: 'Please select an expiration date' }
-              ]}
-            >
-              <DatePicker 
-                placeholder="Select expiration date"
-                style={{ width: '100%' }}
-              />
-            </Form.Item>
-            
-            <Form.Item>
-              <Button 
-                type="primary" 
-                htmlType="submit" 
-                loading={submitting} 
-                block
-                style={{ backgroundColor: '#1890ff', borderColor: '#1890ff' }}
-              >
-                Submit Request
-              </Button>
-            </Form.Item>
-          </Form>
         )}
       </Modal>
     </div>
