@@ -178,11 +178,6 @@ const ExceptionRequests = () => {
       onFilter: (value, record) => record.status === value
     },
     {
-      title: 'Requested By',
-      dataIndex: 'requestedBy',
-      key: 'requestedBy'
-    },
-    {
       title: 'Request Date',
       dataIndex: 'requestedDate',
       key: 'requestedDate',
@@ -326,10 +321,6 @@ const ExceptionRequests = () => {
               <div>
                 <Text strong>Status:</Text>
                 <div>{getStatusTag(selectedRequest.status, selectedRequest.declineReason)}</div>
-              </div>
-              <div>
-                <Text strong>Requested By:</Text>
-                <div>{selectedRequest.requestedBy}</div>
               </div>
               <div>
                 <Text strong>Request Date:</Text>
