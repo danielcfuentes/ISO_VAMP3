@@ -5,6 +5,192 @@
   --utep-gray: #F5F5F5;
 }
 
+/* UTEP Header */
+.utep-header {
+  background-color: var(--utep-navy);
+  padding: 1rem 0;
+  width: 100%;
+}
+
+.header-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.utep-branding {
+  display: flex;
+  align-items: center;
+}
+
+.utep-logo {
+  height: 50px;
+  width: auto;
+}
+
+.department-heading {
+  flex-grow: 1;
+  padding: 0 2rem;
+}
+
+.department-heading h1 {
+  color: var(--utep-white);
+  font-size: 1.5rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.department-heading h2 {
+  color: var(--utep-white);
+  font-size: 1.2rem;
+  margin: 0;
+  font-weight: 400;
+}
+
+.utep-nav-right a {
+  color: var(--utep-white);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+/* Sidebar Styling */
+.utep-sidebar {
+  background-color: var(--utep-gray) !important;
+  border-right: 1px solid #e8e8e8;
+  padding: 1.5rem 0;
+}
+
+.sidebar-heading {
+  color: var(--utep-navy);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 1.5rem 1rem;
+  padding-bottom: 0.5rem;
+}
+
+/* Menu Styling */
+.utep-menu {
+  border-right: none !important;
+  background: transparent !important;
+  padding: 0 1rem !important;
+}
+
+.utep-menu .ant-menu-item {
+  height: 44px !important;
+  line-height: 44px !important;
+  margin: 4px 0 !important;
+  padding: 0 16px !important;
+  border-radius: 4px !important;
+  background-color: var(--utep-navy) !important;
+  color: var(--utep-white) !important;
+  font-weight: 500;
+}
+
+.utep-menu .ant-menu-item:hover {
+  background-color: #0f2d5c !important;
+}
+
+.utep-menu .ant-menu-item-selected {
+  background-color: var(--utep-orange) !important;
+}
+
+.utep-menu .ant-menu-item-icon {
+  color: var(--utep-white) !important;
+  margin-right: 12px !important;
+  font-size: 16px !important;
+}
+
+/* Connect Section */
+.connect-section {
+  margin: 2rem 1.5rem 0;
+}
+
+.divider-accent {
+  width: 40px;
+  height: 3px;
+  background-color: var(--utep-orange);
+  margin-bottom: 1.5rem;
+}
+
+.contact-info {
+  color: var(--utep-navy);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.contact-info p {
+  margin-bottom: 1rem;
+  color: var(--utep-navy);
+}
+
+.contact-item {
+  color: var(--utep-navy);
+  margin-bottom: 0.5rem;
+}
+
+.contact-item .anticon {
+  color: var(--utep-navy);
+  font-size: 14px;
+}
+
+.contact-link {
+  color: var(--utep-navy) !important;
+  text-decoration: none;
+}
+
+.contact-link:hover {
+  color: var(--utep-orange) !important;
+}
+
+/* Social Icons */
+.social-icons {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 1rem;
+}
+
+.social-icons a {
+  color: var(--utep-navy);
+  font-size: 20px;
+  transition: color 0.2s ease;
+}
+
+.social-icons a:hover {
+  color: var(--utep-orange);
+}
+
+/* Logout Section */
+.logout-section {
+  margin: 2rem 1.5rem 0;
+}
+
+.logout-button {
+  color: var(--utep-orange) !important;
+  font-weight: 500;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logout-button:hover {
+  color: #E66800 !important;
+  background-color: #fff3e0;
+}
+
+.logout-button .anticon {
+  margin-right: 8px;
+}
+
+/* Main Content Area */
+.main-content {
+  padding: 2rem;
+  background-color: var(--utep-white);
+}
+
 /* Override Ant Design theme colors */
 .ant-btn-primary {
   background-color: var(--utep-orange) !important;
@@ -16,18 +202,7 @@
   border-color: #E66800 !important;
 }
 
-.ant-menu-dark {
-  background-color: var(--utep-navy) !important;
-}
-
-.ant-menu-item-selected {
-  background-color: var(--utep-orange) !important;
-}
-
-.ant-layout-sider {
-  background-color: var(--utep-navy) !important;
-}
-
+/* Card and Table Styling */
 .ant-card {
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -36,6 +211,60 @@
 .ant-table-thead > tr > th {
   background-color: var(--utep-navy) !important;
   color: var(--utep-white) !important;
+}
+
+/* Modal Styling */
+.ant-modal-header {
+  border-bottom: 1px solid #f0f0f0;
+  padding: 16px 24px;
+}
+
+.ant-modal-title {
+  color: var(--utep-navy);
+}
+
+/* Status Tags */
+.status-tag-completed {
+  background-color: #52c41a;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 12px;
+}
+
+.status-tag-cancelled {
+  background-color: #faad14;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 12px;
+}
+
+.status-tag-aborted {
+  background-color: #ff4d4f;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 12px;
+}
+
+.ant-menu-dark {
+  background-color: #808080 !important;
+}
+
+.ant-menu-item {
+  background-color: #1890ff !important;  /* Blue color for tabs */
+  margin: 4px 8px !important;
+  border-radius: 4px !important;
+}
+
+.ant-menu-item-selected {
+  background-color: var(--utep-orange) !important;  /* Orange for selected tab */
+}
+
+.ant-menu-item:hover {
+  background-color: #40a9ff !important;  /* Lighter blue on hover */
+}
+
+.ant-layout-sider {
+  background-color: #808080 !important;
 }
 
 .ant-tabs-tab.ant-tabs-tab-active {
@@ -52,11 +281,6 @@
   background: var(--utep-white);
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.utep-logo {
-  height: 60px;
-  margin-bottom: 20px;
 }
 
 .status-indicator {
@@ -109,36 +333,4 @@
 .ant-modal-footer .ant-btn-primary:not(.ant-btn-dangerous) {
   background-color: #1890ff !important;
   border-color: #1890ff !important;
-}
-
-/* Modal Header */
-.ant-modal-header {
-  border-bottom: 1px solid #f0f0f0;
-  padding: 16px 24px;
-}
-
-.ant-modal-title {
-  color: var(--utep-navy);
-}
-
-/* Status Tags */
-.status-tag-completed {
-  background-color: #52c41a;
-  color: white;
-  border-radius: 12px;
-  padding: 2px 12px;
-}
-
-.status-tag-cancelled {
-  background-color: #faad14;
-  color: white;
-  border-radius: 12px;
-  padding: 2px 12px;
-}
-
-.status-tag-aborted {
-  background-color: #ff4d4f;
-  color: white;
-  border-radius: 12px;
-  padding: 2px 12px;
 } 

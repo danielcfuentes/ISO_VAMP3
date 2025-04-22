@@ -618,6 +618,7 @@ const Dashboard = () => {
               <Button
                 icon={<DeleteOutlined />}
                 onClick={() => handleDeleteClick(record)}
+                
                 danger
               />
             </Tooltip>
@@ -637,9 +638,6 @@ const Dashboard = () => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ background: '#fff', padding: '0 24px' }}>
-        <Title level={2} style={{ margin: '16px 0' }}>Nessus Dashboard</Title>
-      </Header>
       <Content style={{ padding: '24px' }}>
         <Card 
           title="Nessus Agent Linking Key" 
