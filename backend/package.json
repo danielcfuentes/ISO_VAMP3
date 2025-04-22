@@ -1,24 +1,16 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "app.py",
+  "description": "Backend for the VAMP application",
+  "main": "index.js",
   "scripts": {
-    "start": "python app.py",
-    "db:migrate": "npx prisma migrate dev",
-    "db:generate": "npx prisma generate",
-    "db:reset": "npx prisma migrate reset",
-    "db:studio": "npx prisma studio"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "Backend for ISO VAMP3 application",
   "dependencies": {
-    "@prisma/client": "^5.10.2",
-    "express": "^4.18.2",
-    "pg": "^8.11.3"
   },
   "devDependencies": {
-    "prisma": "^5.10.2"
   }
 }

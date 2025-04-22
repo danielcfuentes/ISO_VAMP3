@@ -1,90 +1,57 @@
-# Backend Database Integration
+# Backend
 
-This document provides information about the PostgreSQL database integration with the ISO VAMP3 application.
+This is the backend service for the VAMP application. It provides API endpoints for vulnerability assessment and management.
 
-## Setup
+## Technology Stack
 
-The application uses PostgreSQL as the database, Prisma as the ORM, and Node.js scripts for database operations called from the Flask backend.
+- Python Flask for the backend API
+- SQL Server for the database
+- pyodbc for database connectivity
 
-### Prerequisites
+## Setup Instructions
 
-- PostgreSQL database server (v12 or higher)
-- Node.js (v16 or higher)
-- Python (v3.6 or higher)
-- pip
-
-### Environment Configuration
-
-The `.env` file contains the configuration for the database connection:
-
-```
-DATABASE_URL="postgresql://postgres:password@localhost:5432/iso_vamp_db?schema=public"
+1. Install Python dependencies:
+```bash
+pip install -r requirements.txt
 ```
 
-Make sure to update this with your actual PostgreSQL credentials and connection details.
+2. Configure SQL Server connection:
+- Update the connection string in `database/sql_server_config.py`
+- Ensure SQL Server is running and accessible
 
-## Database Schema
+3. Create the database tables:
+- Run the SQL scripts in the `database/schema` directory to create necessary tables
 
-The database has the following schema:
+4. Start the backend server:
+```bash
+python app.py
+```
 
-### ExceptionRequest Table
+The server will start on http://localhost:5000
 
-| Column           | Type      | Description                                 |
-|------------------|-----------|---------------------------------------------|
-| id               | Integer   | Primary key, auto-incrementing              |
-| serverName       | String    | Name of the server for exception            |
-| vulnerabilities  | String[]  | Array of vulnerability IDs                  |
-| justification    | String    | Justification for the exception request     |
-| mitigation       | String    | Mitigation measures in place                |
-| expirationDate   | DateTime  | When the exception expires                  |
-| status           | String    | Status (pending, approved, rejected)        |
-| requestedBy      | String    | Username of requester                       |
-| requestedDate    | DateTime  | When the request was made                   |
-| createdAt        | DateTime  | Record creation timestamp                   |
-| updatedAt        | DateTime  | Record update timestamp                     |
+## API Documentation
 
-## Database Scripts
+The backend provides the following main endpoints:
 
-The following Node.js scripts handle database operations:
+- `/api/auth/*` - Authentication endpoints
+- `/api/exception-requests/*` - Exception request management
+- `/api/scans/*` - Scan management
+- `/api/external-scans/*` - External scan management
 
-- `create-exception.js` - Creates a new exception request
-- `get-all-exceptions.js` - Gets all exception requests
+For detailed API documentation, please refer to the API documentation in the docs folder.
 
-## API Endpoints
+## Environment Variables
 
-The following API endpoints are available for exception requests:
+Create a `.env` file in the backend directory with the following variables:
 
-- `POST /api/exception-requests` - Create a new exception request
-- `GET /api/exception-requests` - Get all exception requests
+```env
+# SQL Server Configuration
+SQL_SERVER=your_server_name
+SQL_DATABASE=your_database_name
+SQL_USERNAME=your_username
+SQL_PASSWORD=your_password
+```
 
-## First-time Setup
+## Error Handling
 
-1. Install dependencies:
-   ```
-   npm install
-   ```
-
-2. Generate Prisma client:
-   ```
-   npm run db:generate
-   ```
-
-3. Run database migrations:
-   ```
-   npm run db:migrate
-   ```
-
-4. Start the application:
-   ```
-   npm start
-   ```
-
-## Troubleshooting
-
-If you encounter database connection issues:
-
-1. Verify PostgreSQL is running
-2. Check your database credentials in the `.env` file
-3. Make sure the database exists (create it if needed)
-4. Run `npx prisma migrate reset` to reset the database (will delete all data)
-5. Run `npx prisma studio` to open the Prisma Studio interface for direct database access 
+The application uses proper error handling and logging. Check the logs for troubleshooting. 
