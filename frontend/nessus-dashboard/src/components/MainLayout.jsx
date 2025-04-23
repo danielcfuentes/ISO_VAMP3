@@ -85,6 +85,12 @@ const MainLayout = ({ children, isAdmin, onLogout }) => {
             className="utep-menu"
           />
           
+          <div className="logout-section">
+            <Button type="link" block onClick={onLogout} className="logout-button">
+              <LogoutOutlined /> Sign Out
+            </Button>
+          </div>
+
           <div className="connect-section">
             <h2 className="sidebar-heading">Connect With Us</h2>
             <div className="divider-accent"></div>
@@ -120,12 +126,6 @@ const MainLayout = ({ children, isAdmin, onLogout }) => {
                 <InstagramOutlined />
               </Link>
             </Space>
-          </div>
-
-          <div className="logout-section">
-            <Button type="link" block onClick={onLogout} className="logout-button">
-              <LogoutOutlined /> Sign Out
-            </Button>
           </div>
         </Sider>
 
