@@ -126,6 +126,25 @@ const ExceptionRequestFormModal = ({
     try {
       setSubmitting(true);
       
+      // Get the selected vulnerability IDs from the form
+      const selectedVulnIds = values.vulnerabilities || [];
+      console.log('Selected vulnerability IDs:', selectedVulnIds);
+      
+      // Filter the vulnerabilities array to only include selected ones
+      const selectedVulnerabilities = vulnerabilities
+        .filter(vuln => selectedVulnIds.includes(vuln.plugin_id))
+        .map(vuln => ({
+          id: vuln.plugin_id,
+          name: vuln.plugin_name || vuln.name,
+          severity: vuln.severity,
+          description: vuln.description
+        }));
+      
+      console.log('Selected vulnerabilities:', selectedVulnerabilities);
+      
+      // Determine exception type based on the presence of vulnerabilities
+      const exceptionType = selectedVulnerabilities.length > 0 ? 'Vulnerability' : 'Standard';
+      
       // Prepare the data for submission
       const formData = {
         ...values,
@@ -134,41 +153,47 @@ const ExceptionRequestFormModal = ({
         approverLastName: values.departmentHeadLastName,
         approverJobDescription: values.departmentHeadJobDescription,
         approverEmail: values.departmentHeadEmail,
-        vulnerabilities: vulnerabilities.map(vuln => ({
-          id: vuln.id,
-          name: vuln.name,
-          severity: vuln.severity,
-          description: vuln.description
-        }))
+        vulnerabilities: selectedVulnerabilities,
+        exceptionType: exceptionType
       };
       
+      console.log('Submitting form data:', formData);
+      
       // Send the request to the backend
-      const response = await fetch('http://localhost:5000/api/exception-requests', {
-        method: 'POST',
+      const response = await axios.post(`${API_URL}/exception-requests`, formData, {
+        withCredentials: true,
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
+        }
       });
       
-      let result;
-      try {
-        result = await response.json();
-      } catch (jsonError) {
-        console.error('Error parsing JSON response:', jsonError);
-        throw new Error('Invalid response from server');
-      }
+      console.log('Server response:', response.data);
       
-      if (!response.ok) {
-        throw new Error(result.message || 'Failed to submit exception request');
+      if (response.data.success) {
+        message.success('Exception request submitted successfully');
+        onClose();
+        form.resetFields();
+      } else {
+        throw new Error(response.data.message || 'Failed to submit exception request');
       }
-      
-      message.success('Exception request submitted successfully');
-      onClose();
-      form.resetFields();
     } catch (error) {
       console.error('Error submitting exception request:', error);
-      message.error(error.message || 'Failed to submit exception request');
+      console.error('Error details:', error.response?.data);
+      
+      // Handle specific error cases
+      if (error.response?.status === 500) {
+        message.error('Database connection error. Please try again later.');
+      } else if (error.response?.status === 401) {
+        message.error('Your session has expired. Please log in again.');
+      } else if (error.response?.status === 403) {
+        message.error('You do not have permission to submit exception requests.');
+      } else if (error.response?.data?.message) {
+        message.error(error.response.data.message);
+      } else if (error.message) {
+        message.error(error.message);
+      } else {
+        message.error('Failed to submit exception request. Please try again later.');
+      }
     } finally {
       setSubmitting(false);
     }

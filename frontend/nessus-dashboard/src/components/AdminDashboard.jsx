@@ -140,6 +140,21 @@ const AdminDashboard = () => {
       sorter: (a, b) => a.serverName.localeCompare(b.serverName)
     },
     {
+      title: 'Exception Type',
+      dataIndex: 'exceptionType',
+      key: 'exceptionType',
+      render: (type) => (
+        <Tag color={type === 'Vulnerability' ? 'orange' : 'blue'}>
+          {type}
+        </Tag>
+      ),
+      filters: [
+        { text: 'Vulnerability', value: 'Vulnerability' },
+        { text: 'Standard', value: 'Standard' }
+      ],
+      onFilter: (value, record) => record.exceptionType === value
+    },
+    {
       title: 'Requester',
       dataIndex: 'requesterEmail',
       key: 'requesterEmail',
@@ -207,6 +222,26 @@ const AdminDashboard = () => {
       title: 'Data at Risk',
       dataIndex: 'dataAtRisk',
       key: 'dataAtRisk'
+    },
+    {
+      title: 'Vulnerabilities',
+      dataIndex: 'vulnerabilities',
+      key: 'vulnerabilities',
+      render: (vulnerabilities) => {
+        if (!vulnerabilities) return 'N/A';
+        const vulnArray = typeof vulnerabilities === 'string' 
+          ? JSON.parse(vulnerabilities) 
+          : vulnerabilities;
+        return (
+          <div style={{ maxWidth: '200px' }}>
+            {vulnArray.map((vuln, index) => (
+              <Tag key={index} color="orange" style={{ marginBottom: '4px' }}>
+                {vuln.name || vuln}
+              </Tag>
+            ))}
+          </div>
+        );
+      }
     },
     {
       title: 'Status',

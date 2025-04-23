@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 import os
 import subprocess
 from database.sql_server_config import execute_query
+import pyodbc
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -1726,55 +1727,79 @@ def create_exception_request():
         # Convert vulnerabilities array to JSON string
         vulnerabilities_json = json.dumps(data.get('vulnerabilities', []))
         
-        # Prepare the insert query
-        query = """
-        INSERT INTO VulnerabilityExceptionRequests (
-            ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
-            RequesterJobDescription, RequesterEmail, RequesterPhone,
-            DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
-            DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail, DepartmentHeadPhone,
-            ApproverUsername, DataClassification,
-            ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
-            Vulnerabilities, Justification, Mitigation, TermsAccepted,
-            Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, GETDATE(), GETDATE(), GETDATE())
-        """
+        # Get exception type from the request data
+        exception_type = data.get('exceptionType', 'Standard')
         
-        params = (
-            data.get('serverName'),
-            data.get('requesterFirstName'),
-            data.get('requesterLastName'),
-            requester_department,
-            data.get('requesterJobDescription'),
-            data.get('requesterEmail'),
-            requester_phone,
-            data.get('departmentHeadUsername'),
-            data.get('departmentHeadFirstName'),
-            data.get('departmentHeadLastName'),
-            department_head_department,
-            data.get('departmentHeadJobDescription'),
-            data.get('departmentHeadEmail'),
-            department_head_phone,
-            data.get('dataClassification'),
-            duration_type,
-            expiration_date,
-            data.get('usersAffected'),
-            data.get('dataAtRisk'),
-            vulnerabilities_json,
-            data.get('justification'),
-            data.get('mitigation'),
-            data.get('termsAccepted'),
-            'Pending',
-            username  # Use username from session instead of email
-        )
-        
-        execute_query(query, params)
-        
-        return jsonify({
-            'success': True,
-            'message': 'Exception request submitted successfully'
-        }), 201
-        
+        try:
+            # Prepare the insert query
+            query = """
+            INSERT INTO VulnerabilityExceptionRequests (
+                ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
+                RequesterJobDescription, RequesterEmail, RequesterPhone,
+                DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
+                DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail, DepartmentHeadPhone,
+                ApproverUsername, DataClassification,
+                ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
+                Vulnerabilities, Justification, Mitigation, TermsAccepted,
+                Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt,
+                ExceptionType
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, GETDATE(), GETDATE(), GETDATE(), ?)
+            """
+            
+            params = (
+                data.get('serverName'),
+                data.get('requesterFirstName'),
+                data.get('requesterLastName'),
+                requester_department,
+                data.get('requesterJobDescription'),
+                data.get('requesterEmail'),
+                requester_phone,
+                data.get('departmentHeadUsername'),
+                data.get('departmentHeadFirstName'),
+                data.get('departmentHeadLastName'),
+                department_head_department,
+                data.get('departmentHeadJobDescription'),
+                data.get('departmentHeadEmail'),
+                department_head_phone,
+                data.get('dataClassification'),
+                duration_type,
+                expiration_date,
+                data.get('usersAffected'),
+                data.get('dataAtRisk'),
+                vulnerabilities_json,
+                data.get('justification'),
+                data.get('mitigation'),
+                data.get('termsAccepted'),
+                'Pending',
+                username,  # Use username from session instead of email
+                exception_type
+            )
+            
+            execute_query(query, params)
+            
+            return jsonify({
+                'success': True,
+                'message': 'Exception request submitted successfully'
+            }), 201
+            
+        except pyodbc.Error as e:
+            error_message = str(e)
+            if 'connection' in error_message.lower():
+                return jsonify({
+                    'success': False,
+                    'message': 'Database connection error. Please try again later.'
+                }), 500
+            elif 'timeout' in error_message.lower():
+                return jsonify({
+                    'success': False,
+                    'message': 'Database operation timed out. Please try again.'
+                }), 500
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': f'Database error: {error_message}'
+                }), 500
+                
     except Exception as e:
         logging.error(f"Error submitting exception request: {str(e)}")
         return jsonify({
@@ -1840,7 +1865,8 @@ def get_exception_requests():
             RequestedBy,
             RequestedDate,
             CreatedAt,
-            UpdatedAt
+            UpdatedAt,
+            ExceptionType
         FROM VulnerabilityExceptionRequests
         WHERE RequestedBy = ? OR RequesterEmail LIKE ?
         ORDER BY CreatedAt DESC
@@ -1902,7 +1928,8 @@ def get_exception_requests():
                 'requestedBy': row['RequestedBy'],
                 'requestedDate': requested_date,
                 'createdAt': created_at,
-                'updatedAt': updated_at
+                'updatedAt': updated_at,
+                'exceptionType': row['ExceptionType']
             }
             exception_requests.append(exception_request)
         
@@ -1963,7 +1990,8 @@ def get_all_exception_requests():
             RequestedBy,
             RequestedDate,
             CreatedAt,
-            UpdatedAt
+            UpdatedAt,
+            ExceptionType
         FROM VulnerabilityExceptionRequests
         ORDER BY CreatedAt DESC
         """
@@ -2019,7 +2047,8 @@ def get_all_exception_requests():
                 'requestedBy': row['RequestedBy'],
                 'requestedDate': requested_date,
                 'createdAt': created_at,
-                'updatedAt': updated_at
+                'updatedAt': updated_at,
+                'exceptionType': row['ExceptionType']
             }
             exception_requests.append(exception_request)
         
