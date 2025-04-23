@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Card, Typography, Space, Table, Tag, Button, Modal, message, Input, Tabs } from 'antd';
-import { DashboardOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ScanOutlined, FileTextOutlined } from '@ant-design/icons';
+import { Card, Typography, Space, Table, Tag, Button, Modal, message, Input, Tabs, Select, Row, Col } from 'antd';
+import { DashboardOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ScanOutlined, FileTextOutlined, SearchOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import ExternalScans from './ExternalScans';
 
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
+const { Option } = Select;
 const API_URL = 'http://localhost:5000/api';
 
 const AdminDashboard = () => {
@@ -16,6 +17,9 @@ const AdminDashboard = () => {
   const [declineReason, setDeclineReason] = useState('');
   const [updating, setUpdating] = useState(false);
   const [showDeclineForm, setShowDeclineForm] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
 
   useEffect(() => {
     fetchExceptionRequests();
@@ -132,6 +136,37 @@ const AdminDashboard = () => {
     }
   };
 
+  const filterRequests = (requests) => {
+    return requests.filter(request => {
+      // Apply search filter
+      const searchLower = searchText.toLowerCase();
+      const searchMatch = 
+        request.serverName?.toLowerCase().includes(searchLower) ||
+        request.requesterFirstName?.toLowerCase().includes(searchLower) ||
+        request.requesterLastName?.toLowerCase().includes(searchLower) ||
+        request.requesterEmail?.toLowerCase().includes(searchLower) ||
+        request.requesterDepartment?.toLowerCase().includes(searchLower) ||
+        request.requesterJobDescription?.toLowerCase().includes(searchLower) ||
+        request.departmentHeadFirstName?.toLowerCase().includes(searchLower) ||
+        request.departmentHeadLastName?.toLowerCase().includes(searchLower) ||
+        request.departmentHeadEmail?.toLowerCase().includes(searchLower) ||
+        request.departmentHeadDepartment?.toLowerCase().includes(searchLower) ||
+        request.dataClassification?.toLowerCase().includes(searchLower) ||
+        request.usersAffected?.toLowerCase().includes(searchLower) ||
+        request.dataAtRisk?.toLowerCase().includes(searchLower) ||
+        request.justification?.toLowerCase().includes(searchLower) ||
+        request.mitigation?.toLowerCase().includes(searchLower);
+
+      // Apply status filter
+      const statusMatch = statusFilter === 'all' || request.status?.toLowerCase() === statusFilter.toLowerCase();
+
+      // Apply type filter
+      const typeMatch = typeFilter === 'all' || request.exceptionType === typeFilter;
+
+      return searchMatch && statusMatch && typeMatch;
+    });
+  };
+
   const columns = [
     {
       title: 'Server Name',
@@ -147,12 +182,7 @@ const AdminDashboard = () => {
         <Tag color={type === 'Vulnerability' ? 'orange' : 'blue'}>
           {type}
         </Tag>
-      ),
-      filters: [
-        { text: 'Vulnerability', value: 'Vulnerability' },
-        { text: 'Standard', value: 'Standard' }
-      ],
-      onFilter: (value, record) => record.exceptionType === value
+      )
     },
     {
       title: 'Requester',
@@ -247,13 +277,7 @@ const AdminDashboard = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => getStatusTag(status),
-      filters: [
-        { text: 'Approved', value: 'approved' },
-        { text: 'Pending', value: 'pending' },
-        { text: 'Declined', value: 'declined' }
-      ],
-      onFilter: (value, record) => record.status === value
+      render: (status) => getStatusTag(status)
     },
     {
       title: 'Request Date',
@@ -304,6 +328,60 @@ const AdminDashboard = () => {
     }
   ];
 
+  const renderExceptionRequestsTab = () => (
+    <div>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col span={8}>
+          <Input
+            placeholder="Search in all fields..."
+            prefix={<SearchOutlined />}
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            allowClear
+          />
+        </Col>
+        <Col span={4}>
+          <Select
+            style={{ width: '100%' }}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            placeholder="Filter by status"
+          >
+            <Option value="all">All Statuses</Option>
+            <Option value="pending">Pending</Option>
+            <Option value="approved">Approved</Option>
+            <Option value="declined">Declined</Option>
+          </Select>
+        </Col>
+        <Col span={4}>
+          <Select
+            style={{ width: '100%' }}
+            value={typeFilter}
+            onChange={setTypeFilter}
+            placeholder="Filter by type"
+          >
+            <Option value="all">All Types</Option>
+            <Option value="Vulnerability">Vulnerability</Option>
+            <Option value="Standard">Standard</Option>
+          </Select>
+        </Col>
+      </Row>
+
+      <Table
+        columns={columns}
+        dataSource={filterRequests(exceptionRequests)}
+        rowKey="id"
+        loading={loading}
+        scroll={{ x: true }}
+        pagination={{
+          pageSize: 10,
+          showSizeChanger: true,
+          showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`
+        }}
+      />
+    </div>
+  );
+
   const items = [
     {
       key: 'exception-requests',
@@ -315,15 +393,7 @@ const AdminDashboard = () => {
       ),
       children: (
         <div>
-          <Card title="Exception Requests" className="mb-4">
-            <Table 
-              columns={columns} 
-              dataSource={exceptionRequests}
-              rowKey="id"
-              loading={loading}
-              scroll={{ x: true }}
-            />
-          </Card>
+          {renderExceptionRequestsTab()}
 
           <Modal
             title="Exception Request Details"
