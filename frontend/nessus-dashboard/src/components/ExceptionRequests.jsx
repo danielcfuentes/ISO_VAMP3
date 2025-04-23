@@ -8,7 +8,6 @@ import {
   Modal, 
   message, 
   Tag, 
-  Tooltip,
   Alert
 } from 'antd';
 import { 
@@ -31,13 +30,29 @@ const ExceptionRequests = () => {
   const [standardModalVisible, setStandardModalVisible] = useState(false);
   const [viewModalVisible, setViewModalVisible] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
   const [username, setUsername] = useState('');
   
-  // Get user info and fetch exception requests from the API
   useEffect(() => {
-    fetchExceptionRequests();
+    fetchCurrentUser();
   }, []);
+
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/auth/current-user`, {
+        withCredentials: true
+      });
+      
+      if (response.data.success) {
+        setUsername(response.data.username);
+        fetchExceptionRequests();
+      } else {
+        message.error('Failed to get current user');
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error);
+      message.error('Failed to load user information');
+    }
+  };
   
   const fetchExceptionRequests = async () => {
     setLoading(true);
@@ -45,18 +60,25 @@ const ExceptionRequests = () => {
       const response = await axios.get(`${API_URL}/exception-requests`, {
         withCredentials: true
       });
-      console.log('Fetched exception requests:', response.data);
-      setRequests(response.data);
+      console.log('Raw API Response:', response);
+      console.log('Response Data:', response.data);
+      console.log('Requests Array:', response.data.requests);
       
-      // If we have any requests, we can get the username from the first one
-      if (response.data && response.data.length > 0) {
-        setUsername(response.data[0].requestedBy);
+      if (response.data.success) {
+        const requestsArray = response.data.requests || [];
+        console.log('Setting requests to:', requestsArray);
+        setRequests(requestsArray);
+      } else {
+        console.error('API returned error:', response.data.message);
+        message.error(response.data.message || 'Failed to load exception requests');
+        setRequests([]);
       }
-      
       setLoading(false);
     } catch (error) {
       console.error('Error fetching exception requests:', error);
+      console.error('Error details:', error.response?.data);
       message.error('Failed to load exception requests');
+      setRequests([]);
       setLoading(false);
     }
   };
@@ -67,7 +89,6 @@ const ExceptionRequests = () => {
   };
   
   const handleStandardSubmit = async (values) => {
-    setSubmitting(true);
     try {
       // Format the data and submit
       const formattedData = {
@@ -89,8 +110,6 @@ const ExceptionRequests = () => {
     } catch (err) {
       console.error("Error submitting standard exception request:", err);
       message.error(err.response?.data?.error || "Failed to submit request. Please try again.");
-    } finally {
-      setSubmitting(false);
     }
   };
   
@@ -168,44 +187,16 @@ const ExceptionRequests = () => {
       }
     },
     {
-      title: 'Vulnerabilities',
-      dataIndex: 'vulnerabilities',
-      key: 'vulnerabilities',
-      render: vulns => {
-        try {
-          const vulnerabilities = typeof vulns === 'string' ? JSON.parse(vulns) : vulns;
-          return (
-            <span>
-              {vulnerabilities.map(vuln => (
-                <Tag key={vuln.id || vuln} color="orange" style={{ marginBottom: '4px' }}>
-                  {vuln.name || vuln}
-                </Tag>
-              ))}
-            </span>
-          );
-        } catch (error) {
-          console.error('Error rendering vulnerabilities:', error);
-          return 'Error displaying vulnerabilities';
-        }
-      }
-    },
-    {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
-        <Space size="small">
-          <Tooltip title="View Details">
-            <Button 
-              type="text" 
-              icon={<FileTextOutlined />} 
-              onClick={() => handleOpenModal(record)} 
-            />
-          </Tooltip>
-        </Space>
+        <Button type="link" onClick={() => handleOpenModal(record)}>
+          View Details
+        </Button>
       )
     }
   ];
-  
+
   return (
     <div className="p-6">
       <Card className="shadow-sm">

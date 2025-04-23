@@ -15,7 +15,7 @@ def get_sql_server_connection():
         print(f"Error connecting to SQL Server: {str(e)}")
         raise
 
-def execute_query(query, params=None):
+def execute_query(query, params=None, fetch=False):
     """
     Executes a query and returns the results
     """
@@ -29,7 +29,15 @@ def execute_query(query, params=None):
             cursor.execute(query)
         
         if query.strip().upper().startswith('SELECT'):
-            return cursor.fetchall()
+            if fetch:
+                # Return a list of dictionaries with column names as keys
+                columns = [column[0] for column in cursor.description]
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+            else:
+                return cursor.fetchall()
         else:
             conn.commit()
             return cursor.rowcount
