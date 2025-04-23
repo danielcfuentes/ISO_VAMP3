@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Card, Typography, Space, Table, Tag, Button, Modal, message, Input, Tabs } from 'antd';
 import { DashboardOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ScanOutlined, FileTextOutlined } from '@ant-design/icons';
 import axios from 'axios';
-import moment from 'moment';
 import ExternalScans from './ExternalScans';
 
 const { Title, Paragraph, Text } = Typography;
@@ -28,11 +27,24 @@ const AdminDashboard = () => {
       const response = await axios.get(`${API_URL}/admin/exception-requests`, {
         withCredentials: true
       });
-      setExceptionRequests(response.data);
+      console.log('Raw API Response:', response);
+      console.log('Response Data:', response.data);
+      
+      if (response.data.success) {
+        const requestsArray = response.data.requests || [];
+        console.log('Setting requests to:', requestsArray);
+        setExceptionRequests(requestsArray);
+      } else {
+        console.error('API returned error:', response.data.message);
+        message.error(response.data.message || 'Failed to load exception requests');
+        setExceptionRequests([]);
+      }
       setLoading(false);
     } catch (error) {
       console.error('Error fetching exception requests:', error);
+      console.error('Error details:', error.response?.data);
       message.error('Failed to load exception requests');
+      setExceptionRequests([]);
       setLoading(false);
     }
   };
@@ -145,6 +157,58 @@ const AdminDashboard = () => {
       key: 'requesterDepartment'
     },
     {
+      title: 'Job Description',
+      dataIndex: 'requesterJobDescription',
+      key: 'requesterJobDescription'
+    },
+    {
+      title: 'Phone',
+      dataIndex: 'requesterPhone',
+      key: 'requesterPhone'
+    },
+    {
+      title: 'Department Head',
+      dataIndex: 'departmentHeadEmail',
+      key: 'departmentHeadEmail',
+      render: (email, record) => (
+        <span>
+          {record.departmentHeadFirstName} {record.departmentHeadLastName}
+          <br />
+          <Text type="secondary">{email}</Text>
+        </span>
+      )
+    },
+    {
+      title: 'Dept Head Department',
+      dataIndex: 'departmentHeadDepartment',
+      key: 'departmentHeadDepartment'
+    },
+    {
+      title: 'Dept Head Phone',
+      dataIndex: 'departmentHeadPhone',
+      key: 'departmentHeadPhone'
+    },
+    {
+      title: 'Data Classification',
+      dataIndex: 'dataClassification',
+      key: 'dataClassification'
+    },
+    {
+      title: 'Duration Type',
+      dataIndex: 'exceptionDurationType',
+      key: 'exceptionDurationType'
+    },
+    {
+      title: 'Users Affected',
+      dataIndex: 'usersAffected',
+      key: 'usersAffected'
+    },
+    {
+      title: 'Data at Risk',
+      dataIndex: 'dataAtRisk',
+      key: 'dataAtRisk'
+    },
+    {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
@@ -222,6 +286,7 @@ const AdminDashboard = () => {
               dataSource={exceptionRequests}
               rowKey="id"
               loading={loading}
+              scroll={{ x: true }}
             />
           </Card>
 

@@ -1933,61 +1933,100 @@ def get_all_exception_requests():
         # Query to get all exception requests
         query = """
         SELECT 
-            ID, ServerName, RequesterFirstName, RequesterLastName, RequesterJobDescription,
+            ID,
+            ServerName,
+            RequesterFirstName,
+            RequesterLastName,
+            RequesterDepartment,
+            RequesterJobDescription,
             RequesterEmail,
-            DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
-            DepartmentHeadJobDescription, DepartmentHeadEmail,
-            ApproverUsername, ApproverFirstName, ApproverLastName,
-            ApproverJobDescription, ApproverEmail,
+            RequesterPhone,
+            DepartmentHeadUsername,
+            DepartmentHeadFirstName,
+            DepartmentHeadLastName,
+            DepartmentHeadDepartment,
+            DepartmentHeadJobDescription,
+            DepartmentHeadEmail,
+            DepartmentHeadPhone,
+            ApproverUsername,
             DataClassification,
-            ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
-            Vulnerabilities, Justification, Mitigation, TermsAccepted,
-            Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt
+            ExceptionDurationType,
+            ExpirationDate,
+            UsersAffected,
+            DataAtRisk,
+            Vulnerabilities,
+            Justification,
+            Mitigation,
+            TermsAccepted,
+            Status,
+            DeclineReason,
+            RequestedBy,
+            RequestedDate,
+            CreatedAt,
+            UpdatedAt
         FROM VulnerabilityExceptionRequests
         ORDER BY CreatedAt DESC
         """
         
-        results = execute_query(query)
+        results = execute_query(query, fetch=True)
         
+        if not results:
+            return jsonify({
+                'success': True,
+                'requests': []
+            }), 200
+            
         # Format the results
-        requests = []
+        exception_requests = []
         for row in results:
-            request = {
-                'id': row[0],
-                'serverName': row[1],
-                'requesterFirstName': row[2],
-                'requesterLastName': row[3],
-                'requesterJobDescription': row[4],
-                'requesterEmail': row[5],
-                'departmentHeadUsername': row[6],
-                'departmentHeadFirstName': row[7],
-                'departmentHeadLastName': row[8],
-                'departmentHeadJobDescription': row[9],
-                'departmentHeadEmail': row[10],
-                'approverUsername': row[11],
-                'approverFirstName': row[12],
-                'approverLastName': row[13],
-                'approverJobDescription': row[14],
-                'approverEmail': row[15],
-                'dataClassification': row[16],
-                'exceptionDurationType': row[17],
-                'expirationDate': row[18],
-                'usersAffected': row[19],
-                'dataAtRisk': row[20],
-                'vulnerabilities': row[21],
-                'justification': row[22],
-                'mitigation': row[23],
-                'termsAccepted': row[24],
-                'status': row[25],
-                'declineReason': row[26],
-                'requestedBy': row[27],
-                'requestedDate': row[28],
-                'createdAt': row[29],
-                'updatedAt': row[30]
+            # Convert datetime objects to strings
+            expiration_date = row['ExpirationDate'].strftime('%Y-%m-%d') if row['ExpirationDate'] else None
+            requested_date = row['RequestedDate'].strftime('%Y-%m-%d') if row['RequestedDate'] else None
+            created_at = row['CreatedAt'].strftime('%Y-%m-%d %H:%M:%S') if row['CreatedAt'] else None
+            updated_at = row['UpdatedAt'].strftime('%Y-%m-%d %H:%M:%S') if row['UpdatedAt'] else None
+            
+            # Parse vulnerabilities JSON
+            vulnerabilities = json.loads(row['Vulnerabilities']) if row['Vulnerabilities'] else []
+            
+            exception_request = {
+                'id': row['ID'],
+                'serverName': row['ServerName'],
+                'requesterFirstName': row['RequesterFirstName'],
+                'requesterLastName': row['RequesterLastName'],
+                'requesterDepartment': row['RequesterDepartment'],
+                'requesterJobDescription': row['RequesterJobDescription'],
+                'requesterEmail': row['RequesterEmail'],
+                'requesterPhone': row['RequesterPhone'],
+                'departmentHeadUsername': row['DepartmentHeadUsername'],
+                'departmentHeadFirstName': row['DepartmentHeadFirstName'],
+                'departmentHeadLastName': row['DepartmentHeadLastName'],
+                'departmentHeadDepartment': row['DepartmentHeadDepartment'],
+                'departmentHeadJobDescription': row['DepartmentHeadJobDescription'],
+                'departmentHeadEmail': row['DepartmentHeadEmail'],
+                'departmentHeadPhone': row['DepartmentHeadPhone'],
+                'approverUsername': row['ApproverUsername'],
+                'dataClassification': row['DataClassification'],
+                'exceptionDurationType': row['ExceptionDurationType'],
+                'expirationDate': expiration_date,
+                'usersAffected': row['UsersAffected'],
+                'dataAtRisk': row['DataAtRisk'],
+                'vulnerabilities': vulnerabilities,
+                'justification': row['Justification'],
+                'mitigation': row['Mitigation'],
+                'termsAccepted': row['TermsAccepted'],
+                'status': row['Status'],
+                'declineReason': row['DeclineReason'],
+                'requestedBy': row['RequestedBy'],
+                'requestedDate': requested_date,
+                'createdAt': created_at,
+                'updatedAt': updated_at
             }
-            requests.append(request)
+            exception_requests.append(exception_request)
         
-        return jsonify(requests), 200
+        return jsonify({
+            'success': True,
+            'requests': exception_requests
+        }), 200
         
     except Exception as e:
         logging.error(f"Error fetching all exception requests: {str(e)}")
