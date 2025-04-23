@@ -60,11 +60,11 @@ const AdminDashboard = () => {
     setShowDeclineForm(false);
   };
 
-  const handleApprove = async () => {
+  const handleApprove = async (request) => {
     try {
       setUpdating(true);
       await axios.put(
-        `${API_URL}/exception-requests/${selectedRequest.id}`,
+        `${API_URL}/exception-requests/${request.id}`,
         { status: 'approved' },
         { withCredentials: true }
       );
@@ -79,7 +79,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleDecline = async () => {
+  const handleDecline = async (request) => {
     if (!showDeclineForm) {
       setShowDeclineForm(true);
       return;
@@ -93,7 +93,7 @@ const AdminDashboard = () => {
     try {
       setUpdating(true);
       await axios.put(
-        `${API_URL}/exception-requests/${selectedRequest.id}`,
+        `${API_URL}/exception-requests/${request.id}`,
         { status: 'declined', declineReason },
         { withCredentials: true }
       );
@@ -303,24 +303,29 @@ const AdminDashboard = () => {
       render: (_, record) => (
         <Space size="small">
           <Button 
-            type="text" 
-            icon={<FileTextOutlined />} 
+            type="primary"
             onClick={() => handleViewDetails(record)}
-          />
+          >
+            View Details
+          </Button>
           {record.status === 'pending' && (
             <>
               <Button 
-                type="text" 
-                icon={<CheckCircleOutlined />} 
+                type="primary"
+                icon={<CheckCircleOutlined />}
                 onClick={() => handleApprove(record)}
-                style={{ color: '#52c41a' }}
-              />
+                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+              >
+                Approve
+              </Button>
               <Button 
-                type="text" 
-                icon={<CloseCircleOutlined />} 
+                type="primary"
+                danger
+                icon={<CloseCircleOutlined />}
                 onClick={() => handleDecline(record)}
-                style={{ color: '#ff4d4f' }}
-              />
+              >
+                Decline
+              </Button>
             </>
           )}
         </Space>
@@ -379,6 +384,169 @@ const AdminDashboard = () => {
           showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`
         }}
       />
+
+      <Modal
+        title="Exception Request Details"
+        open={modalVisible}
+        onCancel={() => {
+          setModalVisible(false);
+          setShowDeclineForm(false);
+          setDeclineReason('');
+        }}
+        footer={null}
+        width={700}
+      >
+        {selectedRequest && (
+          <>
+            {console.log('Selected Request:', selectedRequest)}
+            {console.log('Request Status:', selectedRequest.status)}
+            <div>
+              <div className="mb-4">
+                <Text strong>Server Name: </Text>
+                <Text>{selectedRequest.serverName}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Status: </Text>
+                {getStatusTag(selectedRequest.status)}
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Requester: </Text>
+                <Text>{selectedRequest.requesterFirstName} {selectedRequest.requesterLastName}</Text>
+                <br />
+                <Text type="secondary">{selectedRequest.requesterEmail}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Department: </Text>
+                <Text>{selectedRequest.requesterDepartment}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Job Description: </Text>
+                <Text>{selectedRequest.requesterJobDescription}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Department Head: </Text>
+                <Text>{selectedRequest.departmentHeadFirstName} {selectedRequest.departmentHeadLastName}</Text>
+                <br />
+                <Text type="secondary">{selectedRequest.departmentHeadEmail}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Data Classification: </Text>
+                <Text>{selectedRequest.dataClassification}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Exception Type: </Text>
+                <Tag color={selectedRequest.exceptionType === 'Vulnerability' ? 'orange' : 'blue'}>
+                  {selectedRequest.exceptionType}
+                </Tag>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Duration Type: </Text>
+                <Text>{selectedRequest.exceptionDurationType}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Users Affected: </Text>
+                <Text>{selectedRequest.usersAffected}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Data at Risk: </Text>
+                <Text>{selectedRequest.dataAtRisk}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Vulnerabilities: </Text>
+                <div>
+                  {selectedRequest.vulnerabilities?.map((vuln, index) => (
+                    <Tag key={index} color="orange" style={{ marginBottom: '4px' }}>
+                      {vuln.name || vuln}
+                    </Tag>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Justification: </Text>
+                <Text>{selectedRequest.justification}</Text>
+              </div>
+              
+              <div className="mb-4">
+                <Text strong>Mitigation: </Text>
+                <Text>{selectedRequest.mitigation}</Text>
+              </div>
+
+              {/* Action Buttons - Moved inside the main content div */}
+              <div style={{ marginTop: '24px', borderTop: '1px solid #f0f0f0', paddingTop: '16px' }}>
+                {console.log('Rendering buttons section')}
+                {console.log('Status check:', selectedRequest.status === 'pending')}
+                {console.log('Show decline form:', showDeclineForm)}
+                
+                {(selectedRequest.status === 'pending' || selectedRequest.status === 'Pending') && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    {!showDeclineForm ? (
+                      <>
+                        <Button 
+                          type="primary"
+                          style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                          icon={<CheckCircleOutlined />}
+                          onClick={() => handleApprove(selectedRequest)}
+                          loading={updating}
+                        >
+                          Approve
+                        </Button>
+                        <Button 
+                          type="primary"
+                          danger
+                          icon={<CloseCircleOutlined />}
+                          onClick={() => handleDecline(selectedRequest)}
+                          loading={updating}
+                        >
+                          Decline
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button onClick={() => setShowDeclineForm(false)}>
+                          Cancel
+                        </Button>
+                        <Button 
+                          type="primary" 
+                          danger
+                          onClick={() => handleDecline(selectedRequest)}
+                          loading={updating}
+                          disabled={!declineReason}
+                        >
+                          Confirm Decline
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Decline Form */}
+              {showDeclineForm && (
+                <div style={{ marginTop: '16px' }}>
+                  <TextArea
+                    placeholder="Enter reason for declining..."
+                    value={declineReason}
+                    onChange={e => setDeclineReason(e.target.value)}
+                    rows={4}
+                  />
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 
@@ -394,126 +562,6 @@ const AdminDashboard = () => {
       children: (
         <div>
           {renderExceptionRequestsTab()}
-
-          <Modal
-            title="Exception Request Details"
-            open={modalVisible}
-            onCancel={() => setModalVisible(false)}
-            footer={null}
-            width={700}
-          >
-            {selectedRequest && (
-              <div>
-                <div className="mb-4">
-                  <Text strong>Server Name: </Text>
-                  <Text>{selectedRequest.serverName}</Text>
-                </div>
-                
-                <div className="mb-4">
-                  <Text strong>Status: </Text>
-                  {getStatusTag(selectedRequest.status)}
-                </div>
-                
-                <div className="mb-4">
-                  <Text strong>Requester: </Text>
-                  <Text>{selectedRequest.requesterFirstName} {selectedRequest.requesterLastName}</Text>
-                  <br />
-                  <Text type="secondary">{selectedRequest.requesterEmail}</Text>
-                </div>
-                
-                <div className="mb-4">
-                  <Text strong>Department: </Text>
-                  <Text>{selectedRequest.requesterDepartment}</Text>
-                </div>
-                
-                <div className="mb-4">
-                  <Text strong>Request Date: </Text>
-                  <Text>{formatTimestamp(selectedRequest.requestedDate)}</Text>
-                </div>
-                
-                <div className="mb-4">
-                  <Text strong>Expiration Date: </Text>
-                  <Text>{formatTimestamp(selectedRequest.expirationDate)}</Text>
-                </div>
-                
-                <div className="mb-4">
-                  <Text strong>Vulnerabilities: </Text>
-                  <div>
-                    {typeof selectedRequest.vulnerabilities === 'string' 
-                      ? JSON.parse(selectedRequest.vulnerabilities).map(vuln => (
-                          <Tag key={vuln.id || vuln} color="orange" style={{ marginBottom: '4px' }}>
-                            {vuln.name || vuln}
-                          </Tag>
-                        ))
-                      : selectedRequest.vulnerabilities.map(vuln => (
-                          <Tag key={vuln.id || vuln} color="orange" style={{ marginBottom: '4px' }}>
-                            {vuln.name || vuln}
-                          </Tag>
-                        ))
-                    }
-                  </div>
-                </div>
-                
-                <div className="mb-4">
-                  <Text strong>Justification: </Text>
-                  <div>{selectedRequest.justification}</div>
-                </div>
-                
-                <div className="mb-4">
-                  <Text strong>Mitigation Measures: </Text>
-                  <div>{selectedRequest.mitigation}</div>
-                </div>
-                
-                {selectedRequest.status === 'pending' && (
-                  <div className="mt-4">
-                    {!showDeclineForm ? (
-                      <Space>
-                        <Button 
-                          type="primary" 
-                          icon={<CheckCircleOutlined />}
-                          onClick={handleApprove}
-                          loading={updating}
-                        >
-                          Approve
-                        </Button>
-                        <Button 
-                          danger 
-                          icon={<CloseCircleOutlined />}
-                          onClick={handleDecline}
-                          loading={updating}
-                        >
-                          Decline
-                        </Button>
-                      </Space>
-                    ) : (
-                      <div>
-                        <TextArea
-                          rows={4}
-                          placeholder="Enter reason for declining"
-                          value={declineReason}
-                          onChange={(e) => setDeclineReason(e.target.value)}
-                          className="mb-4"
-                        />
-                        <Space>
-                          <Button 
-                            danger 
-                            icon={<CloseCircleOutlined />}
-                            onClick={handleDecline}
-                            loading={updating}
-                          >
-                            Confirm Decline
-                          </Button>
-                          <Button onClick={() => setShowDeclineForm(false)}>
-                            Cancel
-                          </Button>
-                        </Space>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </Modal>
         </div>
       )
     },
