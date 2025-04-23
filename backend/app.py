@@ -233,6 +233,31 @@ def login():
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 401
 
+@app.route('/api/auth/current-user', methods=['GET'])
+@login_required
+def get_current_user():
+    """
+    Get the current user's username from the session
+    """
+    try:
+        username = session.get('username')
+        if not username:
+            return jsonify({
+                'success': False,
+                'message': 'No user found in session'
+            }), 401
+            
+        return jsonify({
+            'success': True,
+            'username': username
+        }), 200
+        
+    except Exception as e:
+        logging.error(f"Error getting current user: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error getting current user: {str(e)}'
+        }), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
@@ -1322,6 +1347,8 @@ def get_internal_vulnerability_plugin_details(scan_id, host_id, plugin_id):
             'family': plugin_desc.get('pluginfamily'),
             'severity': plugin_desc.get('severity'),
             'risk_factor': risk_info.get('risk_factor'),
+            'plugin_type': plugin_info.get('plugin_type'),
+            'plugin_modification_date': plugin_info.get('plugin_modification_date'),
             'synopsis': plugin_attrs.get('synopsis'),
             'description': plugin_attrs.get('description'),
             'solution': plugin_attrs.get('solution'),
@@ -1646,13 +1673,13 @@ def create_exception_request():
 
         # Validate required fields
         required_fields = [
-            'serverName', 'requesterFirstName', 'requesterLastName', 'requesterDepartment',
-            'requesterJobDescription', 'requesterEmail', 'requesterPhone',
-            'approverFirstName', 'approverLastName',
-            'approverDepartment', 'approverJobDescription', 'approverEmail',
-            'approverPhone', 'dataClassification', 'exceptionDurationType',
-            'usersAffected', 'dataAtRisk', 'justification', 'mitigation',
-            'termsAccepted'
+            'serverName', 'requesterFirstName', 'requesterLastName',
+            'requesterJobDescription', 'requesterEmail',
+            'departmentHeadUsername', 'departmentHeadFirstName',
+            'departmentHeadLastName', 'departmentHeadJobDescription',
+            'departmentHeadEmail', 'dataClassification',
+            'exceptionDurationType', 'usersAffected', 'dataAtRisk',
+            'justification', 'mitigation', 'termsAccepted'
         ]
 
         missing_fields = [field for field in required_fields if not data.get(field)]
@@ -1661,6 +1688,12 @@ def create_exception_request():
                 'success': False,
                 'message': f'Missing required fields: {", ".join(missing_fields)}'
             }), 400
+        
+        # Get optional fields, allowing NULL values
+        requester_department = data.get('requesterDepartment')
+        requester_phone = data.get('requesterPhone')
+        department_head_department = data.get('departmentHeadDepartment')
+        department_head_phone = data.get('departmentHeadPhone')
         
         # Calculate expiration date based on duration type
         duration_type = data.get('exceptionDurationType')
@@ -1690,56 +1723,29 @@ def create_exception_request():
             ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
             RequesterJobDescription, RequesterEmail, RequesterPhone,
             DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
-            DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail,
-            DepartmentHeadPhone, ApproverUsername, DataClassification,
+            DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail, DepartmentHeadPhone,
+            ApproverUsername, DataClassification,
             ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
             Vulnerabilities, Justification, Mitigation, TermsAccepted,
-            Status, RequestedBy, RequestedDate, CreatedAt, UpdatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), GETDATE(), GETDATE())
+            Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, GETDATE(), GETDATE(), GETDATE())
         """
-        
-        # Parameters in order:
-        # 1. serverName
-        # 2. requesterFirstName
-        # 3. requesterLastName
-        # 4. requesterDepartment
-        # 5. requesterJobDescription
-        # 6. requesterEmail
-        # 7. requesterPhone
-        # 8. approverUsername
-        # 9. approverFirstName
-        # 10. approverLastName
-        # 11. approverDepartment
-        # 12. approverJobDescription
-        # 13. approverEmail
-        # 14. approverPhone
-        # 15. dataClassification
-        # 16. duration_type
-        # 17. expiration_date
-        # 18. usersAffected
-        # 19. dataAtRisk
-        # 20. vulnerabilities_json
-        # 21. justification
-        # 22. mitigation
-        # 23. termsAccepted
-        # 24. status
-        # 25. requestedBy
         
         params = (
             data.get('serverName'),
             data.get('requesterFirstName'),
             data.get('requesterLastName'),
-            data.get('requesterDepartment'),
+            requester_department,
             data.get('requesterJobDescription'),
             data.get('requesterEmail'),
-            data.get('requesterPhone'),
-            data.get('approverUsername'),
-            data.get('approverFirstName'),
-            data.get('approverLastName'),
-            data.get('approverDepartment'),
-            data.get('approverJobDescription'),
-            data.get('approverEmail'),
-            data.get('approverPhone'),
+            requester_phone,
+            data.get('departmentHeadUsername'),
+            data.get('departmentHeadFirstName'),
+            data.get('departmentHeadLastName'),
+            department_head_department,
+            data.get('departmentHeadJobDescription'),
+            data.get('departmentHeadEmail'),
+            department_head_phone,
             data.get('dataClassification'),
             duration_type,
             expiration_date,
@@ -1782,11 +1788,13 @@ def get_exception_requests():
         # Query to get exception requests for the user
         query = """
         SELECT 
-            ID, ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
-            RequesterJobDescription, RequesterEmail, RequesterPhone,
+            ID, ServerName, RequesterFirstName, RequesterLastName, RequesterJobDescription,
+            RequesterEmail,
             DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
-            DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail,
-            DepartmentHeadPhone, ApproverUsername, DataClassification,
+            DepartmentHeadJobDescription, DepartmentHeadEmail,
+            ApproverUsername, ApproverFirstName, ApproverLastName,
+            ApproverJobDescription, ApproverEmail,
+            DataClassification,
             ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
             Vulnerabilities, Justification, Mitigation, TermsAccepted,
             Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt
@@ -1805,18 +1813,18 @@ def get_exception_requests():
                 'serverName': row[1],
                 'requesterFirstName': row[2],
                 'requesterLastName': row[3],
-                'requesterDepartment': row[4],
-                'requesterJobDescription': row[5],
-                'requesterEmail': row[6],
-                'requesterPhone': row[7],
-                'departmentHeadUsername': row[8],
-                'departmentHeadFirstName': row[9],
-                'departmentHeadLastName': row[10],
-                'departmentHeadDepartment': row[11],
-                'departmentHeadJobDescription': row[12],
-                'departmentHeadEmail': row[13],
-                'departmentHeadPhone': row[14],
-                'approverUsername': row[15],
+                'requesterJobDescription': row[4],
+                'requesterEmail': row[5],
+                'departmentHeadUsername': row[6],
+                'departmentHeadFirstName': row[7],
+                'departmentHeadLastName': row[8],
+                'departmentHeadJobDescription': row[9],
+                'departmentHeadEmail': row[10],
+                'approverUsername': row[11],
+                'approverFirstName': row[12],
+                'approverLastName': row[13],
+                'approverJobDescription': row[14],
+                'approverEmail': row[15],
                 'dataClassification': row[16],
                 'exceptionDurationType': row[17],
                 'expirationDate': row[18],
@@ -1858,11 +1866,13 @@ def get_all_exception_requests():
         # Query to get all exception requests
         query = """
         SELECT 
-            ID, ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
-            RequesterJobDescription, RequesterEmail, RequesterPhone,
+            ID, ServerName, RequesterFirstName, RequesterLastName, RequesterJobDescription,
+            RequesterEmail,
             DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
-            DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail,
-            DepartmentHeadPhone, ApproverUsername, DataClassification,
+            DepartmentHeadJobDescription, DepartmentHeadEmail,
+            ApproverUsername, ApproverFirstName, ApproverLastName,
+            ApproverJobDescription, ApproverEmail,
+            DataClassification,
             ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
             Vulnerabilities, Justification, Mitigation, TermsAccepted,
             Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt
@@ -1880,18 +1890,18 @@ def get_all_exception_requests():
                 'serverName': row[1],
                 'requesterFirstName': row[2],
                 'requesterLastName': row[3],
-                'requesterDepartment': row[4],
-                'requesterJobDescription': row[5],
-                'requesterEmail': row[6],
-                'requesterPhone': row[7],
-                'departmentHeadUsername': row[8],
-                'departmentHeadFirstName': row[9],
-                'departmentHeadLastName': row[10],
-                'departmentHeadDepartment': row[11],
-                'departmentHeadJobDescription': row[12],
-                'departmentHeadEmail': row[13],
-                'departmentHeadPhone': row[14],
-                'approverUsername': row[15],
+                'requesterJobDescription': row[4],
+                'requesterEmail': row[5],
+                'departmentHeadUsername': row[6],
+                'departmentHeadFirstName': row[7],
+                'departmentHeadLastName': row[8],
+                'departmentHeadJobDescription': row[9],
+                'departmentHeadEmail': row[10],
+                'approverUsername': row[11],
+                'approverFirstName': row[12],
+                'approverLastName': row[13],
+                'approverJobDescription': row[14],
+                'approverEmail': row[15],
                 'dataClassification': row[16],
                 'exceptionDurationType': row[17],
                 'expirationDate': row[18],
@@ -1969,6 +1979,55 @@ def update_exception_request(request_id):
     except Exception as e:
         logging.error(f"Error updating exception request: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<username>', methods=['GET'])
+@login_required
+def get_user_info(username):
+    """
+    Get user information from ISODepot.dbo.Persons table
+    """
+    try:
+        query = """
+        SELECT 
+            ADUserName,
+            FirstName,
+            LastName,
+            DepartmentName,
+            DepartmentJobTitle,
+            EmailAddress,
+            CampusPhone
+        FROM ISODepot.dbo.Persons
+        WHERE ADUserName = ?
+        """
+        
+        results = execute_query(query, (username,))
+        
+        if not results:
+            return jsonify({
+                'success': False,
+                'message': 'User not found'
+            }), 404
+            
+        user = results[0]
+        return jsonify({
+            'success': True,
+            'data': {
+                'username': user[0],
+                'firstName': user[1],
+                'lastName': user[2],
+                'department': user[3],
+                'jobDescription': user[4],
+                'email': user[5],
+                'phone': user[6]
+            }
+        }), 200
+        
+    except Exception as e:
+        logging.error(f"Error fetching user info: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching user info: {str(e)}'
+        }), 500
 
 # =============================================================================
 # MAIN APPLICATION ENTRY POINT
