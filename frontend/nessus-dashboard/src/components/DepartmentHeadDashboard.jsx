@@ -29,25 +29,42 @@ const DepartmentHeadDashboard = () => {
   const fetchExceptionRequests = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/department-head/exception-requests`, {
+      // Get username from session
+      const userResponse = await axios.get(`${API_URL}/auth/current-user`, {
+        withCredentials: true
+      });
+      
+      if (!userResponse.data.success) {
+        message.error('Failed to get current user');
+        setLoading(false);
+        return;
+      }
+      
+      const username = userResponse.data.username;
+      
+      // Fetch ALL requests where department head username matches the current user
+      const response = await axios.get(`${API_URL}/exception-requests`, {
         withCredentials: true
       });
       
       if (response.data.success) {
         const requestsArray = response.data.requests || [];
+        
+        // Filter for requests where this user is the department head
+        const filteredRequests = requestsArray.filter(req => 
+          req.departmentHeadUsername === username
+        );
+        
         // Process each request to ensure phase and status fields are set
-        const processedRequests = requestsArray.map(request => {
+        const processedRequests = filteredRequests.map(request => {
           const currentPhase = request.approvalPhase || determinePhase(request);
           return {
             ...request,
             approvalPhase: currentPhase,
-            // Set the overall status based on the phase and individual statuses
-            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
-                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
-                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
-                   'PENDING'
+            status: determineStatus(request, currentPhase)
           };
         });
+        
         setExceptionRequests(processedRequests);
       } else {
         message.error(response.data.message || 'Failed to load exception requests');
@@ -93,6 +110,14 @@ const DepartmentHeadDashboard = () => {
     
     // Default to ISO_REVIEW for new requests
     return 'ISO_REVIEW';
+  };
+
+  // Helper function to determine the status based on request and phase
+  const determineStatus = (request, phase) => {
+    if (phase === 'COMPLETED') return 'APPROVED';
+    if (request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED') return 'DECLINED';
+    if (request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO') return 'NEED_MORE_INFO';
+    return 'PENDING';
   };
 
   const handleViewDetails = (request) => {
@@ -520,6 +545,52 @@ const DepartmentHeadDashboard = () => {
       )
     }
   ];
+
+  // Add a refresh function that can be called after any state changes
+  const refreshExceptionRequests = async () => {
+    try {
+      // Get username from session
+      const userResponse = await axios.get(`${API_URL}/auth/current-user`, {
+        withCredentials: true
+      });
+      
+      if (!userResponse.data.success) {
+        message.error('Failed to get current user');
+        return;
+      }
+      
+      const username = userResponse.data.username;
+      
+      // Fetch ALL requests where department head username matches the current user
+      const response = await axios.get(`${API_URL}/exception-requests`, {
+        withCredentials: true
+      });
+      
+      if (response.data.success) {
+        const requestsArray = response.data.requests || [];
+        
+        // Filter for requests where this user is the department head
+        const filteredRequests = requestsArray.filter(req => 
+          req.departmentHeadUsername === username
+        );
+        
+        // Process each request to ensure phase and status fields are set
+        const processedRequests = filteredRequests.map(request => {
+          const currentPhase = request.approvalPhase || determinePhase(request);
+          return {
+            ...request,
+            approvalPhase: currentPhase,
+            status: determineStatus(request, currentPhase)
+          };
+        });
+        
+        setExceptionRequests(processedRequests);
+      }
+    } catch (error) {
+      console.error('Error refreshing requests:', error);
+      message.error('Failed to refresh requests');
+    }
+  };
 
   return (
     <div style={{ padding: '24px' }}>

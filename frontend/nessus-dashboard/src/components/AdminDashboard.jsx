@@ -117,6 +117,14 @@ const AdminDashboard = () => {
     return 'ISO_REVIEW';
   };
 
+  // Helper function to determine the status based on request and phase
+  const determineStatus = (request, phase) => {
+    if (phase === 'COMPLETED') return 'APPROVED';
+    if (request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED') return 'DECLINED';
+    if (request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO') return 'NEED_MORE_INFO';
+    return 'PENDING';
+  };
+
   const handleViewDetails = (request) => {
     setSelectedRequest(request);
     setModalVisible(true);
@@ -148,16 +156,10 @@ const AdminDashboard = () => {
         {
           status: 'APPROVED',
           comments: '',
-          approvalPhase: currentPhase,
-          // Include reviewer information
-          reviewerInfo: {
-            phase: currentPhase,
-            status: 'APPROVED'
-          }
+          approvalPhase: currentPhase
         },
         { 
           withCredentials: true,
-          // Add error handling timeout
           timeout: 10000,
           headers: {
             'Content-Type': 'application/json'
@@ -179,7 +181,6 @@ const AdminDashboard = () => {
       console.error('Error approving request:', error);
       console.error('Error details:', error.response?.data);
       
-      // More specific error messages
       if (error.response?.status === 404) {
         message.error('Request not found. Please refresh the page.');
       } else if (error.response?.status === 500) {
@@ -201,17 +202,12 @@ const AdminDashboard = () => {
       
       if (response.data.success) {
         const requestsArray = response.data.requests || [];
-        console.log('Refreshed requests:', requestsArray);
-        
         const processedRequests = requestsArray.map(request => {
           const currentPhase = request.approvalPhase || determinePhase(request);
           return {
             ...request,
             approvalPhase: currentPhase,
-            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
-                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
-                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
-                   'PENDING'
+            status: determineStatus(request, currentPhase)
           };
         });
         
@@ -219,6 +215,7 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error('Error refreshing requests:', error);
+      message.error('Failed to refresh requests');
     }
   };
 

@@ -2228,161 +2228,119 @@ def get_user_info(username):
 @login_required
 def update_exception_request_status(request_id):
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'message': 'No data provided'}), 400
-
+        data = request.json
         status = data.get('status')
         comments = data.get('comments', '')
-
-        # Validate status
-        if status not in ['APPROVED', 'DECLINED', 'NEED_MORE_INFO']:
-            return jsonify({'success': False, 'message': 'Invalid status provided'}), 400
-
-        # Get current request data
-        query = """
-        SELECT * FROM VulnerabilityExceptionRequests WHERE ID = ?
-        """
-        result = execute_query(query, (request_id,), fetch=True)
-        
-        if not result:
-            return jsonify({'success': False, 'message': 'Exception request not found'}), 404
-
-        request_data = result[0]
+        current_phase = data.get('approvalPhase')
         username = session.get('username')
 
-        # Get user info for email notifications
-        user_query = """
-        SELECT FirstName, LastName, DepartmentJobTitle
-        FROM ISODepot.dbo.Persons
-        WHERE ADUserName = ?
-        """
-        user_result = execute_query(user_query, (username,), fetch=True)
-        reviewer_name = f"{user_result[0]['FirstName']} {user_result[0]['LastName']}" if user_result else username
-        reviewer_role = user_result[0]['DepartmentJobTitle'] if user_result else None
+        # Get the current request data
+        request_data = execute_query(
+            "SELECT * FROM VulnerabilityExceptionRequests WHERE ID = ?",
+            (request_id,),
+            fetch=True
+        )
+        
+        if not request_data:
+            return jsonify({'success': False, 'message': 'Request not found'}), 404
 
-        # Determine current phase based on approval statuses
-        current_phase = 'ISO_REVIEW'  # Default phase
-        if request_data['ISO_Status'] is not None:
-            if request_data['ISO_Status'] == 'APPROVED':
-                current_phase = 'DEPARTMENT_HEAD_REVIEW'
-            if request_data['DeptHead_Status'] is not None:
-                if request_data['DeptHead_Status'] == 'APPROVED':
-                    current_phase = 'CISO_REVIEW'
-                if request_data['CISO_Status'] is not None and request_data['CISO_Status'] == 'APPROVED':
-                    current_phase = 'COMPLETED'
-
-        # Determine next phase based on current phase and status
+        request_dict = request_data[0]
+        
+        # Determine the next phase based on current phase and status
         next_phase = current_phase
-        if status == 'APPROVED':
-            if current_phase == 'ISO_REVIEW':
-                next_phase = 'DEPARTMENT_HEAD_REVIEW'
-            elif current_phase == 'DEPARTMENT_HEAD_REVIEW':
-                next_phase = 'CISO_REVIEW'
-            elif current_phase == 'CISO_REVIEW':
-                next_phase = 'COMPLETED'
+        if current_phase == 'ISO_REVIEW' and status == 'APPROVED':
+            next_phase = 'DEPARTMENT_HEAD_REVIEW'
+            # Send email to department head
+            try:
+                dept_head_email = request_dict.get('DepartmentHeadEmail')
+                request_id_value = request_dict.get('RequestID')
+                server_name = request_dict.get('ServerName')
+                
+                if dept_head_email:
+                    outlook = win32com.client.Dispatch("Outlook.Application")
+                    mail = outlook.CreateItem(0)
+                    mail.To = dept_head_email
+                    mail.Subject = f"Exception Request Ready for Review - {request_id_value}"
+                    mail.HTMLBody = f"""
+                    <p>An exception request requires your review.</p>
+                    <p><strong>Request ID:</strong> {request_id_value}</p>
+                    <p><strong>Server Name:</strong> {server_name}</p>
+                    <p>Please review this request in the VaMP portal:</p>
+                    <p><a href="http://localhost:5173/department-head-dashboard">Review Request</a></p>
+                    """
+                    mail.Send()
+            except Exception as e:
+                logging.error(f"Error sending email to department head: {str(e)}")
 
-        # Update status based on current phase
-        if current_phase == 'ISO_REVIEW':
-            update_query = """
-                UPDATE VulnerabilityExceptionRequests 
-                SET Status = ?,
-                    ISO_Status = ?,
-                    ISO_Comments = ?,
-                    ISO_ReviewedBy = ?,
-                    ISO_ReviewDate = GETDATE(),
-                    LastModifiedBy = ?,
-                    ApprovalPhase = ?,
-                    UpdatedAt = GETDATE()
-                WHERE ID = ?
-            """
-            params = (status, status, comments, username, username, next_phase, request_id)
+        # First update the phase and overall status
+        phase_update_query = """
+        UPDATE VulnerabilityExceptionRequests 
+        SET ApprovalPhase = ?,
+            Status = ?,
+            UpdatedAt = GETDATE(),
+            LastModifiedBy = ?
+        WHERE ID = ?
+        """
+        execute_query(phase_update_query, (next_phase, status, username, request_id))
+
+        # Then update the specific status and comments for the current phase
+        status_update_query = """
+        UPDATE VulnerabilityExceptionRequests 
+        SET ISO_Status = CASE WHEN ? = 'ISO_REVIEW' THEN ? ELSE ISO_Status END,
+            ISO_Comments = CASE WHEN ? = 'ISO_REVIEW' THEN ? ELSE ISO_Comments END,
+            ISO_ReviewedBy = CASE WHEN ? = 'ISO_REVIEW' THEN ? ELSE ISO_ReviewedBy END,
+            ISO_ReviewDate = CASE WHEN ? = 'ISO_REVIEW' THEN GETDATE() ELSE ISO_ReviewDate END,
+            DeptHead_Status = CASE WHEN ? = 'DEPARTMENT_HEAD_REVIEW' THEN ? ELSE DeptHead_Status END,
+            DeptHead_Comments = CASE WHEN ? = 'DEPARTMENT_HEAD_REVIEW' THEN ? ELSE DeptHead_Comments END,
+            DeptHead_ReviewDate = CASE WHEN ? = 'DEPARTMENT_HEAD_REVIEW' THEN GETDATE() ELSE DeptHead_ReviewDate END,
+            CISO_Status = CASE WHEN ? = 'CISO_REVIEW' THEN ? ELSE CISO_Status END,
+            CISO_Comments = CASE WHEN ? = 'CISO_REVIEW' THEN ? ELSE CISO_Comments END,
+            CISO_ReviewDate = CASE WHEN ? = 'CISO_REVIEW' THEN GETDATE() ELSE CISO_ReviewDate END
+        WHERE ID = ?
+        """
+        
+        status_params = (
+            current_phase, status,  # ISO status and comments
+            current_phase, comments,
+            current_phase, username,
+            current_phase,
+            current_phase, status,  # Department Head status and comments
+            current_phase, comments,
+            current_phase,
+            current_phase, status,  # CISO status and comments
+            current_phase, comments,
+            current_phase,
+            request_id
+        )
+        
+        execute_query(status_update_query, status_params)
+        
+        # Get the updated phase and status
+        verify_query = """
+        SELECT ApprovalPhase, Status FROM VulnerabilityExceptionRequests WHERE ID = ?
+        """
+        verify_result = execute_query(verify_query, (request_id,), fetch=True)
+        
+        if verify_result:
+            actual_phase = verify_result[0].get('ApprovalPhase')
+            actual_status = verify_result[0].get('Status')
+            logging.info(f"Updated request {request_id} - Phase: {actual_phase}, Status: {actual_status}")
             
-        elif current_phase == 'DEPARTMENT_HEAD_REVIEW':
-            update_query = """
-                UPDATE VulnerabilityExceptionRequests 
-                SET Status = ?,
-                    DeptHead_Status = ?,
-                    DeptHead_Comments = ?,
-                    DeptHead_ReviewedBy = ?,
-                    DeptHead_ReviewDate = GETDATE(),
-                    LastModifiedBy = ?,
-                    ApprovalPhase = ?,
-                    UpdatedAt = GETDATE()
-                WHERE ID = ?
-            """
-            params = (status, status, comments, username, username, next_phase, request_id)
-            
-        elif current_phase == 'CISO_REVIEW':
-            update_query = """
-                UPDATE VulnerabilityExceptionRequests 
-                SET Status = ?,
-                    CISO_Status = ?,
-                    CISO_Comments = ?,
-                    CISO_ReviewedBy = ?,
-                    CISO_ReviewDate = GETDATE(),
-                    LastModifiedBy = ?,
-                    ApprovalPhase = ?,
-                    UpdatedAt = GETDATE()
-                WHERE ID = ?
-            """
-            params = (status, status, comments, username, username, next_phase, request_id)
-
-        # Execute the update query
-        execute_query(update_query, params)
-
-        # Send appropriate email notification based on status and phase
-        try:
-            if status == 'APPROVED':
-                if next_phase == 'COMPLETED':  # Final approval
-                    send_approval_email(request_data, reviewer_name, reviewer_role)
-                else:  # Intermediate approval
-                    # Get next reviewer's email based on phase
-                    next_reviewer_email = None
-                    if next_phase == 'DEPARTMENT_HEAD_REVIEW':
-                        next_reviewer_email = request_data['DepartmentHeadEmail']
-                    elif next_phase == 'CISO_REVIEW':
-                        next_reviewer_email = "bstanella@utep.edu"  # CISO email
-
-                    if next_reviewer_email:
-                        # Create and send the email using Outlook
-                        outlook = win32com.client.Dispatch("Outlook.Application")
-                        mail = outlook.CreateItem(0)
-                        mail.To = next_reviewer_email
-                        mail.Subject = f"VAMP TESTING EMAIL: Exception Request Ready for Review - {request_data['RequestID']}"
-                        mail.HTMLBody = f"""
-                        <p>A vulnerability exception request requires your review.</p>
-                        <p><strong>Request ID:</strong> {request_data['RequestID']}</p>
-                        <p><strong>Server Name:</strong> {request_data['ServerName']}</p>
-                        <p><strong>Previous Approval:</strong> {current_phase} - Approved by {reviewer_name}</p>
-                        <p>Please review this request in the VaMP portal:</p>
-                        <p><a href="http://localhost:5173/exception-requests">Review Request</a></p>
-                        """
-                        mail.Send()
-            else:
-                # For declines or need more info, use existing email functions
-                if status == 'DECLINED':
-                    send_decline_email(request_data, reviewer_name, reviewer_role, comments)
-                elif status == 'NEED_MORE_INFO':
-                    send_need_more_info_email(request_data, reviewer_name, reviewer_role, comments)
-
-        except Exception as e:
-            logging.error(f"Error sending email: {str(e)}")
-            # Continue even if email fails
-            pass
-
-        return jsonify({
-            'success': True,
-            'message': f'Exception request {status.lower()} successfully',
-            'nextPhase': next_phase
-        })
-
+            return jsonify({
+                'success': True,
+                'message': f'Exception request {status.lower()} successfully',
+                'nextPhase': next_phase,
+                'currentPhase': actual_phase  # Return the actual current phase from the database
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to verify update'
+            }), 500
+        
     except Exception as e:
-        logging.error(f"Error updating request status: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'An error occurred while updating the request status'
-        }), 500
+        logging.error(f"Error updating exception request status: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/department-head/exception-requests', methods=['GET'])
 @login_required
@@ -2695,6 +2653,42 @@ def resubmit_exception_request(request_id):
             'success': False,
             'message': f'Error resubmitting exception request: {str(e)}'
         }), 500
+
+@app.route('/api/exception-requests/<int:request_id>', methods=['GET'])
+@login_required
+def get_exception_request(request_id):
+    try:
+        # Get the request data
+        request_data = execute_query(
+            "SELECT * FROM VulnerabilityExceptionRequests WHERE ID = ?",
+            (request_id,),
+            fetch=True
+        )
+        
+        if not request_data:
+            return jsonify({'success': False, 'message': 'Request not found'}), 404
+            
+        # The result is already a dictionary when fetch=True
+        request_dict = request_data[0]
+        
+        # Handle datetime objects and JSON fields
+        for key, value in request_dict.items():
+            if isinstance(value, datetime):
+                request_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+            elif key == 'Vulnerabilities' and value:
+                try:
+                    request_dict[key] = json.loads(value)
+                except:
+                    request_dict[key] = []
+            
+        return jsonify({
+            'success': True,
+            'request': request_dict
+        })
+        
+    except Exception as e:
+        logging.error(f"Error getting exception request: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 # =============================================================================
 # MAIN APPLICATION ENTRY POINT

@@ -356,6 +356,12 @@ const ExceptionRequests = () => {
               <Text strong>ISO Review</Text>
               <br />
               <Text>Status: {request.isoStatus}</Text>
+              {request.isoReviewedBy && (
+                <>
+                  <br />
+                  <Text>Reviewed by: {request.isoReviewedBy}</Text>
+                </>
+              )}
               {request.isoComments && (
                 <>
                   <br />
@@ -379,6 +385,12 @@ const ExceptionRequests = () => {
               <Text strong>Department Head Review</Text>
               <br />
               <Text>Status: {request.deptHeadStatus}</Text>
+              {request.deptHeadReviewedBy && (
+                <>
+                  <br />
+                  <Text>Reviewed by: {request.deptHeadReviewedBy}</Text>
+                </>
+              )}
               {request.deptHeadComments && (
                 <>
                   <br />
@@ -402,6 +414,12 @@ const ExceptionRequests = () => {
               <Text strong>CISO Review</Text>
               <br />
               <Text>Status: {request.cisoStatus}</Text>
+              {request.cisoReviewedBy && (
+                <>
+                  <br />
+                  <Text>Reviewed by: {request.cisoReviewedBy}</Text>
+                </>
+              )}
               {request.cisoComments && (
                 <>
                   <br />
