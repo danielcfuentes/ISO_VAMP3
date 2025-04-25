@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>New Vulnerability Exception Request Notification</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #041E42;
+            padding: 20px;
+            color: white;
+            text-align: center;
+        }
+        .content {
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .footer {
+            padding: 10px 20px;
+            font-size: 12px;
+            text-align: center;
+            color: #666;
+        }
+        .button {
+            display: inline-block;
+            background-color: #FF7300;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            margin-top: 15px;
+        }
+        .info-box {
+            background-color: #e1f5fe;
+            border-left: 4px solid #03a9f4;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .request-details {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .request-details h3 {
+            margin-top: 0;
+            color: #041E42;
+        }
+        .request-details p {
+            margin: 5px 0;
+        }
+        .label {
+            font-weight: bold;
+            color: #041E42;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>UTEP Information Security Office</h1>
+        <h2>Vulnerability Management Program (VaMP)</h2>
+    </div>
+    
+    <div class="content">
+        <h2>New Exception Request Notification</h2>
+        
+        <div class="info-box">
+            <p><strong>A new vulnerability exception request has been submitted and requires your review.</strong></p>
+        </div>
+        
+        <div class="request-details">
+            <h3>Request Details</h3>
+            <p><span class="label">Request ID:</span> {{ request_id }}</p>
+            <p><span class="label">Server Name:</span> {{ server_name }}</p>
+            <p><span class="label">Requester:</span> {{ requester_first_name }} {{ requester_last_name }}</p>
+            <p><span class="label">Requester Email:</span> {{ requester_email }}</p>
+            <p><span class="label">Department:</span> {{ requester_department }}</p>
+            <p><span class="label">Job Description:</span> {{ requester_job_description }}</p>
+            <p><span class="label">Data Classification:</span> {{ data_classification }}</p>
+            <p><span class="label">Exception Duration:</span> {{ exception_duration }}</p>
+            <p><span class="label">Expiration Date:</span> {{ expiration_date }}</p>
+            <p><span class="label">Users Affected:</span> {{ users_affected }}</p>
+            <p><span class="label">Data at Risk:</span> {{ data_at_risk }}</p>
+        </div>
+        
+        <p>Please review this request in the VaMP portal and take appropriate action.</p>
+        
+        <p><a href="{{ dashboard_url }}" class="button">Review Request</a></p>
+    </div>
+    
+    <div class="footer">
+        <p>&copy; 2024 UTEP Information Security Office • All rights reserved</p>
+        <p>This email was sent automatically. Please do not reply to this message.</p>
+    </div>
+</body>
+</html> 

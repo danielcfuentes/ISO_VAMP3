@@ -17,7 +17,7 @@ import os
 import subprocess
 from database.sql_server_config import execute_query
 import pyodbc
-from email_utils import send_confirmation_email
+from email_utils import send_confirmation_email, send_security_notification
 import threading
 
 # Disable SSL warnings
@@ -1732,52 +1732,86 @@ def create_exception_request():
         # Get exception type from the request data
         exception_type = data.get('exceptionType', 'Standard')
         
+        # Prepare the insert query
+        query = """
+        INSERT INTO VulnerabilityExceptionRequests (
+            ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
+            RequesterJobDescription, RequesterEmail, RequesterPhone,
+            DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
+            DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail, DepartmentHeadPhone,
+            ApproverUsername, DataClassification,
+            ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
+            Vulnerabilities, Justification, Mitigation, TermsAccepted,
+            Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt,
+            ExceptionType
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, GETDATE(), GETDATE(), GETDATE(), ?)
+        """
+        
+        params = (
+            data.get('serverName'),
+            data.get('requesterFirstName'),
+            data.get('requesterLastName'),
+            requester_department,
+            data.get('requesterJobDescription'),
+            data.get('requesterEmail'),
+            requester_phone,
+            data.get('departmentHeadUsername'),
+            data.get('departmentHeadFirstName'),
+            data.get('departmentHeadLastName'),
+            department_head_department,
+            data.get('departmentHeadJobDescription'),
+            data.get('departmentHeadEmail'),
+            department_head_phone,
+            data.get('dataClassification'),
+            duration_type,
+            expiration_date,
+            data.get('usersAffected'),
+            data.get('dataAtRisk'),
+            vulnerabilities_json,
+            data.get('justification'),
+            data.get('mitigation'),
+            data.get('termsAccepted'),
+            'Pending',
+            username,  # Use username from session instead of email
+            exception_type
+        )
+        
         try:
-            # Prepare the insert query
-            query = """
-            INSERT INTO VulnerabilityExceptionRequests (
-                ServerName, RequesterFirstName, RequesterLastName, RequesterDepartment,
-                RequesterJobDescription, RequesterEmail, RequesterPhone,
-                DepartmentHeadUsername, DepartmentHeadFirstName, DepartmentHeadLastName,
-                DepartmentHeadDepartment, DepartmentHeadJobDescription, DepartmentHeadEmail, DepartmentHeadPhone,
-                ApproverUsername, DataClassification,
-                ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
-                Vulnerabilities, Justification, Mitigation, TermsAccepted,
-                Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt,
-                ExceptionType
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, GETDATE(), GETDATE(), GETDATE(), ?)
-            """
-            
-            params = (
-                data.get('serverName'),
-                data.get('requesterFirstName'),
-                data.get('requesterLastName'),
-                requester_department,
-                data.get('requesterJobDescription'),
-                data.get('requesterEmail'),
-                requester_phone,
-                data.get('departmentHeadUsername'),
-                data.get('departmentHeadFirstName'),
-                data.get('departmentHeadLastName'),
-                department_head_department,
-                data.get('departmentHeadJobDescription'),
-                data.get('departmentHeadEmail'),
-                department_head_phone,
-                data.get('dataClassification'),
-                duration_type,
-                expiration_date,
-                data.get('usersAffected'),
-                data.get('dataAtRisk'),
-                vulnerabilities_json,
-                data.get('justification'),
-                data.get('mitigation'),
-                data.get('termsAccepted'),
-                'Pending',
-                username,  # Use username from session instead of email
-                exception_type
-            )
-            
+            # Execute the query and get the new request ID
             execute_query(query, params)
+            
+            # Get the ID of the newly inserted request
+            get_id_query = """
+            SELECT TOP 1 ID 
+            FROM VulnerabilityExceptionRequests 
+            WHERE RequestedBy = ? 
+            ORDER BY CreatedAt DESC
+            """
+            result = execute_query(get_id_query, (username,), fetch=True)
+            request_id = result[0]['ID'] if result else None
+            
+            if not request_id:
+                logging.error("Failed to get the ID of the newly created request")
+                return jsonify({
+                    'success': False,
+                    'message': 'Error creating exception request'
+                }), 500
+            
+            # Prepare request data for email
+            request_data = {
+                'id': request_id,
+                'serverName': data.get('serverName'),
+                'requesterFirstName': data.get('requesterFirstName'),
+                'requesterLastName': data.get('requesterLastName'),
+                'requesterEmail': data.get('requesterEmail'),
+                'requesterDepartment': requester_department,
+                'requesterJobDescription': data.get('requesterJobDescription'),
+                'dataClassification': data.get('dataClassification'),
+                'exceptionDurationType': duration_type,
+                'expirationDate': expiration_date,
+                'usersAffected': data.get('usersAffected'),
+                'dataAtRisk': data.get('dataAtRisk')
+            }
             
             # Send confirmation email to the requester
             requester_email = data.get('requesterEmail')
@@ -1788,6 +1822,13 @@ def create_exception_request():
                     args=(requester_email, server_name)
                 )
                 email_thread.start()
+            
+            # Send notification email to security team
+            security_thread = threading.Thread(
+                target=send_security_notification,
+                args=(request_data,)
+            )
+            security_thread.start()
             
             return jsonify({
                 'success': True,
