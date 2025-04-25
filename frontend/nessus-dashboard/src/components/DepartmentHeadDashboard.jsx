@@ -108,43 +108,63 @@ const DepartmentHeadDashboard = () => {
     try {
       setUpdating(true);
       const currentPhase = request.approvalPhase || determinePhase(request);
+      console.log('Current phase before approval:', currentPhase);
+      console.log('Request data:', request);
+      
+      // First verify the request exists
+      try {
+        await axios.get(`${API_URL}/exception-requests/${request.id}`, { withCredentials: true });
+      } catch (error) {
+        if (error.response?.status === 404) {
+          message.error('Request not found. Please refresh the page.');
+          return;
+        }
+      }
       
       const response = await axios.put(
         `${API_URL}/exception-requests/${request.id}/update-status`,
         { 
           status: 'APPROVED',
           comments: '',
-          approvalPhase: currentPhase
+          approvalPhase: currentPhase,
+          // Include reviewer information
+          reviewerInfo: {
+            phase: currentPhase,
+            status: 'APPROVED'
+          }
         },
-        { withCredentials: true }
+        { 
+          withCredentials: true,
+          // Add error handling timeout
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       );
       
       if (response.data.success) {
         message.success('Request approved successfully');
-        // Update the request in the table with the next phase
-        const updatedRequests = exceptionRequests.map(req => {
-          if (req.id === request.id) {
-            return {
-              ...req,
-              status: response.data.nextPhase === 'COMPLETED' ? 'APPROVED' : 'PENDING',
-              approvalPhase: response.data.nextPhase,
-              // Update the specific status field based on current phase
-              ...(currentPhase === 'DEPARTMENT_HEAD_REVIEW' && { 
-                deptHeadStatus: 'APPROVED', 
-                deptHeadReviewDate: new Date().toISOString() 
-              })
-            };
-          }
-          return req;
-        });
-        setExceptionRequests(updatedRequests);
+        console.log('Response from approval:', response.data);
+        
+        // Refresh the data
+        await refreshExceptionRequests();
         setModalVisible(false);
       } else {
-        message.error(response.data.message || 'Failed to approve request');
+        throw new Error(response.data.message || 'Failed to approve request');
       }
     } catch (error) {
       console.error('Error approving request:', error);
-      message.error('Failed to approve request');
+      console.error('Error details:', error.response?.data);
+      
+      // More specific error messages
+      if (error.response?.status === 404) {
+        message.error('Request not found. Please refresh the page.');
+      } else if (error.response?.status === 500) {
+        message.error('Server error while approving request. Please try again or contact support.');
+      } else {
+        message.error(error.response?.data?.message || 'Failed to approve request. Please try again.');
+      }
     } finally {
       setUpdating(false);
     }
@@ -366,8 +386,8 @@ const DepartmentHeadDashboard = () => {
   const renderActionButtons = (request) => {
     // Only show action buttons if the request is in the Department Head Review phase
     const canTakeAction = request.approvalPhase === 'DEPARTMENT_HEAD_REVIEW' && 
-                         request.status !== 'APPROVED' && 
-                         request.status !== 'DECLINED';
+                         !request.deptHeadStatus && // Only if department head hasn't acted yet
+                         request.isoStatus === 'APPROVED'; // Only if ISO has approved
     
     return (
       <div style={{ marginTop: 16, textAlign: 'right' }}>

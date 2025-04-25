@@ -130,46 +130,110 @@ const AdminDashboard = () => {
     try {
       setUpdating(true);
       const currentPhase = request.approvalPhase || determinePhase(request);
+      console.log('Current phase before approval:', currentPhase);
+      console.log('Request data:', request);
+      
+      // First verify the request exists
+      try {
+        await axios.get(`${API_URL}/exception-requests/${request.id}`, { withCredentials: true });
+      } catch (error) {
+        if (error.response?.status === 404) {
+          message.error('Request not found. Please refresh the page.');
+          return;
+        }
+      }
       
       const response = await axios.put(
         `${API_URL}/exception-requests/${request.id}/update-status`,
         {
           status: 'APPROVED',
-          comments: '',  // Empty comments for approval
-          approvalPhase: currentPhase
+          comments: '',
+          approvalPhase: currentPhase,
+          // Include reviewer information
+          reviewerInfo: {
+            phase: currentPhase,
+            status: 'APPROVED'
+          }
         },
-        { withCredentials: true }
+        { 
+          withCredentials: true,
+          // Add error handling timeout
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       );
       
       if (response.data.success) {
         message.success('Request approved successfully');
-        // Update the request in the table with the next phase
-        const updatedRequests = exceptionRequests.map(req => {
-          if (req.id === request.id) {
-            return {
-              ...req,
-              status: response.data.nextPhase === 'COMPLETED' ? 'APPROVED' : 'PENDING',
-              approvalPhase: response.data.nextPhase,
-              // Update the specific status field based on current phase
-              ...(currentPhase === 'ISO_REVIEW' && { isoStatus: 'APPROVED', isoReviewDate: new Date().toISOString() }),
-              ...(currentPhase === 'DEPARTMENT_HEAD_REVIEW' && { deptHeadStatus: 'APPROVED', deptHeadReviewDate: new Date().toISOString() }),
-              ...(currentPhase === 'CISO_REVIEW' && { cisoStatus: 'APPROVED', cisoReviewDate: new Date().toISOString() })
-            };
-          }
-          return req;
-        });
-        setExceptionRequests(updatedRequests);
+        console.log('Response from approval:', response.data);
+        
+        // Refresh the data
+        await refreshExceptionRequests();
         setModalVisible(false);
       } else {
-        message.error(response.data.message || 'Failed to approve request');
+        throw new Error(response.data.message || 'Failed to approve request');
       }
     } catch (error) {
       console.error('Error approving request:', error);
-      message.error(error.response?.data?.message || 'Failed to approve request. Please try again.');
+      console.error('Error details:', error.response?.data);
+      
+      // More specific error messages
+      if (error.response?.status === 404) {
+        message.error('Request not found. Please refresh the page.');
+      } else if (error.response?.status === 500) {
+        message.error('Server error while approving request. Please try again or contact support.');
+      } else {
+        message.error(error.response?.data?.message || 'Failed to approve request. Please try again.');
+      }
     } finally {
       setUpdating(false);
     }
   };
+
+  // Add a refresh function that can be called after any state changes
+  const refreshExceptionRequests = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/admin/exception-requests`, {
+        withCredentials: true
+      });
+      
+      if (response.data.success) {
+        const requestsArray = response.data.requests || [];
+        console.log('Refreshed requests:', requestsArray);
+        
+        const processedRequests = requestsArray.map(request => {
+          const currentPhase = request.approvalPhase || determinePhase(request);
+          return {
+            ...request,
+            approvalPhase: currentPhase,
+            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
+                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+                   'PENDING'
+          };
+        });
+        
+        setExceptionRequests(processedRequests);
+      }
+    } catch (error) {
+      console.error('Error refreshing requests:', error);
+    }
+  };
+
+  // Add effect to refresh data periodically or when modal closes
+  useEffect(() => {
+    if (!modalVisible) {
+      refreshExceptionRequests();
+    }
+  }, [modalVisible]);
+
+  // Add effect to refresh data periodically
+  useEffect(() => {
+    const refreshInterval = setInterval(refreshExceptionRequests, 30000); // Refresh every 30 seconds
+    return () => clearInterval(refreshInterval);
+  }, []);
 
   const handleDecline = async (request) => {
     if (!showDeclineForm) {

@@ -175,13 +175,57 @@ const ExceptionRequests = () => {
     }
   };
   
+  // Add a refresh function that can be called after any state changes
+  const refreshRequests = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/exception-requests`, {
+        withCredentials: true
+      });
+      
+      if (response.data.success) {
+        const requestsArray = response.data.requests || [];
+        console.log('Refreshed requests:', requestsArray);
+        
+        const processedRequests = requestsArray.map(request => {
+          const currentPhase = request.approvalPhase || determinePhase(request);
+          return {
+            ...request,
+            approvalPhase: currentPhase,
+            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
+                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+                   'PENDING'
+          };
+        });
+        
+        setRequests(processedRequests);
+      }
+    } catch (error) {
+      console.error('Error refreshing requests:', error);
+    }
+  };
+
+  // Add effect to refresh data periodically or when modal closes
+  useEffect(() => {
+    if (!viewModalVisible && !standardModalVisible && !resubmitModalVisible) {
+      refreshRequests();
+    }
+  }, [viewModalVisible, standardModalVisible, resubmitModalVisible]);
+
+  // Add effect to refresh data periodically
+  useEffect(() => {
+    const refreshInterval = setInterval(refreshRequests, 30000); // Refresh every 30 seconds
+    return () => clearInterval(refreshInterval);
+  }, []);
+
   const handleResubmit = async (values) => {
     try {
       const response = await axios.put(
         `${API_URL}/exception-requests/${selectedRequest.id}/resubmit`,
         {
           ...values,
-          resubmitComment: values.resubmitComment
+          resubmitComment: values.resubmitComment,
+          currentPhase: selectedRequest.approvalPhase || determinePhase(selectedRequest)
         },
         { withCredentials: true }
       );
@@ -189,7 +233,7 @@ const ExceptionRequests = () => {
       if (response.data.success) {
         message.success('Request resubmitted successfully');
         setResubmitModalVisible(false);
-        fetchExceptionRequests();
+        await refreshRequests(); // Refresh the data immediately after resubmission
       } else {
         message.error(response.data.message || 'Failed to resubmit request');
       }
