@@ -17,6 +17,8 @@ import os
 import subprocess
 from database.sql_server_config import execute_query
 import pyodbc
+from email_utils import send_confirmation_email
+import threading
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -1776,6 +1778,16 @@ def create_exception_request():
             )
             
             execute_query(query, params)
+            
+            # Send confirmation email to the requester
+            requester_email = data.get('requesterEmail')
+            server_name = data.get('serverName')
+            if requester_email:
+                email_thread = threading.Thread(
+                    target=send_confirmation_email,
+                    args=(requester_email, server_name)
+                )
+                email_thread.start()
             
             return jsonify({
                 'success': True,

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>NEW VAMP TESTING EMAIL: Vulnerability Exception Request Confirmation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #041E42;
+            padding: 20px;
+            color: white;
+            text-align: center;
+        }
+        .content {
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .footer {
+            padding: 10px 20px;
+            font-size: 12px;
+            text-align: center;
+            color: #666;
+        }
+        .button {
+            display: inline-block;
+            background-color: #FF7300;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            margin-top: 15px;
+        }
+        .info-box {
+            background-color: #e1f5fe;
+            border-left: 4px solid #03a9f4;
+            padding: 15px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>UTEP Information Security Office</h1>
+        <h2>Vulnerability Management Program (VaMP)</h2>
+    </div>
+    
+    <div class="content">
+        <h2>Exception Request Confirmation</h2>
+        
+        <p>Thank you for submitting a vulnerability exception request for <strong>{{ server_name }}</strong>.</p>
+        
+        <div class="info-box">
+            <p><strong>Your request has been received and is currently pending approval.</strong></p>
+            <p>The Information Security Office will review your request and provide a decision as soon as possible.</p>
+        </div>
+        
+        <p>You can check the status of your request at any time by visiting the Exception Requests dashboard on the VaMP portal.</p>
+        
+        <p><a href="{{ dashboard_url }}" class="button">View Request Status</a></p>
+        
+        <p>If you have any questions or need further assistance, please contact the Information Security Office at security@utep.edu.</p>
+    </div>
+    
+    <div class="footer">
+        <p>&copy; 2024 UTEP Information Security Office</p>
+        <p>This email was sent automatically. Please do not reply to this message.</p>
+    </div>
+</body>
+</html> 
