@@ -1,6 +1,12 @@
+import {
+  FileTextOutlined,
+  SearchOutlined,
+  ScanOutlined,
+  InfoCircleOutlined
+} from '@ant-design/icons';
 import { useState, useEffect } from 'react';
-import { Card, Typography, Space, Table, Tag, Button, Modal, message, Input, Tabs, Select, Row, Col } from 'antd';
-import { DashboardOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, ScanOutlined, FileTextOutlined, SearchOutlined } from '@ant-design/icons';
+import { Card, Typography, Space, Table, Tag, Button, Modal, message, Input, Tabs, Select, Row, Col, Timeline } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import ExternalScans from './ExternalScans';
 
@@ -15,15 +21,32 @@ const AdminDashboard = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [declineReason, setDeclineReason] = useState('');
+  const [moreInfoReason, setMoreInfoReason] = useState('');
   const [updating, setUpdating] = useState(false);
   const [showDeclineForm, setShowDeclineForm] = useState(false);
+  const [showMoreInfoForm, setShowMoreInfoForm] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [phaseFilter, setPhaseFilter] = useState('all');
 
   useEffect(() => {
     fetchExceptionRequests();
+    fetchUserRoles();
   }, []);
+
+  const fetchUserRoles = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/user/roles`, {
+        withCredentials: true
+      });
+      if (response.data.success) {
+        console.log('User roles fetched:', response.data.roles);
+      }
+    } catch (error) {
+      console.error('Error fetching user roles:', error);
+    }
+  };
 
   const fetchExceptionRequests = async () => {
     setLoading(true);
@@ -31,49 +54,118 @@ const AdminDashboard = () => {
       const response = await axios.get(`${API_URL}/admin/exception-requests`, {
         withCredentials: true
       });
-      console.log('Raw API Response:', response);
-      console.log('Response Data:', response.data);
       
       if (response.data.success) {
         const requestsArray = response.data.requests || [];
-        console.log('Setting requests to:', requestsArray);
-        setExceptionRequests(requestsArray);
+        // Process each request to ensure phase and status fields are set
+        const processedRequests = requestsArray.map(request => {
+          const currentPhase = request.approvalPhase || determinePhase(request);
+          return {
+            ...request,
+            approvalPhase: currentPhase,
+            // Set the overall status based on the phase and individual statuses
+            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
+                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+                   'PENDING'
+          };
+        });
+        setExceptionRequests(processedRequests);
       } else {
-        console.error('API returned error:', response.data.message);
         message.error(response.data.message || 'Failed to load exception requests');
         setExceptionRequests([]);
       }
       setLoading(false);
     } catch (error) {
       console.error('Error fetching exception requests:', error);
-      console.error('Error details:', error.response?.data);
       message.error('Failed to load exception requests');
       setExceptionRequests([]);
       setLoading(false);
     }
   };
 
+  // Helper function to determine the phase based on request status
+  const determinePhase = (request) => {
+    if (!request) return 'ISO_REVIEW';
+    
+    // If CISO has made a decision
+    if (request.cisoStatus) {
+      return request.cisoStatus === 'APPROVED' ? 'COMPLETED' : 'CISO_REVIEW';
+    }
+    
+    // If Department Head has made a decision and it's approved, move to CISO
+    if (request.deptHeadStatus === 'APPROVED') {
+      return 'CISO_REVIEW';
+    }
+    
+    // If ISO has approved, move to Department Head
+    if (request.isoStatus === 'APPROVED') {
+      return 'DEPARTMENT_HEAD_REVIEW';
+    }
+    
+    // If Department Head has made any other decision (DECLINED, NEED_MORE_INFO)
+    if (request.deptHeadStatus) {
+      return 'DEPARTMENT_HEAD_REVIEW';
+    }
+    
+    // If ISO has made any decision (DECLINED, NEED_MORE_INFO)
+    if (request.isoStatus) {
+      return 'ISO_REVIEW';
+    }
+    
+    // Default to ISO_REVIEW for new requests
+    return 'ISO_REVIEW';
+  };
+
   const handleViewDetails = (request) => {
     setSelectedRequest(request);
     setModalVisible(true);
     setDeclineReason('');
+    setMoreInfoReason('');
     setShowDeclineForm(false);
+    setShowMoreInfoForm(false);
   };
 
   const handleApprove = async (request) => {
     try {
       setUpdating(true);
-      await axios.put(
-        `${API_URL}/exception-requests/${request.id}`,
-        { status: 'approved' },
+      const currentPhase = request.approvalPhase || determinePhase(request);
+      
+      const response = await axios.put(
+        `${API_URL}/exception-requests/${request.id}/update-status`,
+        {
+          status: 'APPROVED',
+          comments: '',  // Empty comments for approval
+          approvalPhase: currentPhase
+        },
         { withCredentials: true }
       );
-      message.success('Exception request approved');
-      setModalVisible(false);
-      fetchExceptionRequests();
+      
+      if (response.data.success) {
+        message.success('Request approved successfully');
+        // Update the request in the table with the next phase
+        const updatedRequests = exceptionRequests.map(req => {
+          if (req.id === request.id) {
+            return {
+              ...req,
+              status: response.data.nextPhase === 'COMPLETED' ? 'APPROVED' : 'PENDING',
+              approvalPhase: response.data.nextPhase,
+              // Update the specific status field based on current phase
+              ...(currentPhase === 'ISO_REVIEW' && { isoStatus: 'APPROVED', isoReviewDate: new Date().toISOString() }),
+              ...(currentPhase === 'DEPARTMENT_HEAD_REVIEW' && { deptHeadStatus: 'APPROVED', deptHeadReviewDate: new Date().toISOString() }),
+              ...(currentPhase === 'CISO_REVIEW' && { cisoStatus: 'APPROVED', cisoReviewDate: new Date().toISOString() })
+            };
+          }
+          return req;
+        });
+        setExceptionRequests(updatedRequests);
+        setModalVisible(false);
+      } else {
+        message.error(response.data.message || 'Failed to approve request');
+      }
     } catch (error) {
       console.error('Error approving request:', error);
-      message.error('Failed to approve request');
+      message.error(error.response?.data?.message || 'Failed to approve request. Please try again.');
     } finally {
       setUpdating(false);
     }
@@ -93,8 +185,8 @@ const AdminDashboard = () => {
     try {
       setUpdating(true);
       await axios.put(
-        `${API_URL}/exception-requests/${request.id}`,
-        { status: 'declined', declineReason },
+        `${API_URL}/exception-requests/${request.id}/update-status`,
+        { status: 'DECLINED', comments: declineReason },
         { withCredentials: true }
       );
       message.success('Exception request declined');
@@ -108,18 +200,70 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleNeedMoreInfo = async (request) => {
+    if (!showMoreInfoForm) {
+      setShowMoreInfoForm(true);
+      return;
+    }
+
+    if (!moreInfoReason) {
+      message.error('Please provide details about what additional information is needed');
+      return;
+    }
+
+    try {
+      setUpdating(true);
+      await axios.put(
+        `${API_URL}/exception-requests/${request.id}/update-status`,
+        { status: 'NEED_MORE_INFO', comments: moreInfoReason },
+        { withCredentials: true }
+      );
+      message.success('Request for more information sent');
+      setModalVisible(false);
+      fetchExceptionRequests();
+    } catch (error) {
+      console.error('Error requesting more information:', error);
+      message.error('Failed to send request for more information');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const getStatusTag = (status) => {
     const statusMappings = {
-      'approved': { color: 'success', icon: <CheckCircleOutlined />, text: 'Approved' },
-      'pending': { color: 'processing', icon: <ClockCircleOutlined />, text: 'Pending' },
-      'declined': { color: 'error', icon: <CloseCircleOutlined />, text: 'Declined' }
+      'APPROVED': { color: 'success', icon: <CheckCircleOutlined />, text: 'Approved' },
+      'PENDING': { color: 'processing', icon: <ClockCircleOutlined />, text: 'Pending' },
+      'DECLINED': { color: 'error', icon: <CloseCircleOutlined />, text: 'Declined' },
+      'NEED_MORE_INFO': { color: 'warning', icon: <InfoCircleOutlined />, text: 'Need More Info' }
     };
     
-    const mapping = statusMappings[status] || { color: 'default', text: status };
+    // Adjust status display for the modal view
+    let displayStatus = status;
+    if (status === 'APPROVED' && selectedRequest && 
+        (!selectedRequest.approvalPhase || selectedRequest.approvalPhase !== 'COMPLETED')) {
+      displayStatus = 'PENDING';
+    }
+    
+    const mapping = statusMappings[displayStatus] || { color: 'default', text: displayStatus };
     
     return (
       <Tag icon={mapping.icon} color={mapping.color}>
         {mapping.text}
+      </Tag>
+    );
+  };
+
+  const getPhaseTag = (phase) => {
+    const phaseColors = {
+      'ISO_REVIEW': 'blue',
+      'DEPARTMENT_HEAD_REVIEW': 'purple',
+      'CISO_REVIEW': 'orange',
+      'COMPLETED': 'green'
+    };
+    
+    return (
+      <Tag color={phaseColors[phase] || 'default'}>
+        {phase?.replace('_', ' ') || 'Unknown'}
       </Tag>
     );
   };
@@ -155,7 +299,8 @@ const AdminDashboard = () => {
         request.usersAffected?.toLowerCase().includes(searchLower) ||
         request.dataAtRisk?.toLowerCase().includes(searchLower) ||
         request.justification?.toLowerCase().includes(searchLower) ||
-        request.mitigation?.toLowerCase().includes(searchLower);
+        request.mitigation?.toLowerCase().includes(searchLower) ||
+        request.requestID?.toLowerCase().includes(searchLower);
 
       // Apply status filter
       const statusMatch = statusFilter === 'all' || request.status?.toLowerCase() === statusFilter.toLowerCase();
@@ -163,11 +308,33 @@ const AdminDashboard = () => {
       // Apply type filter
       const typeMatch = typeFilter === 'all' || request.exceptionType === typeFilter;
 
-      return searchMatch && statusMatch && typeMatch;
+      // Apply phase filter
+      const phaseMatch = phaseFilter === 'all' || request.approvalPhase === phaseFilter;
+
+      return searchMatch && statusMatch && typeMatch && phaseMatch;
     });
   };
 
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'APPROVED':
+        return <CheckCircleOutlined />;
+      case 'DECLINED':
+        return <CloseCircleOutlined />;
+      case 'NEED_MORE_INFO':
+        return <InfoCircleOutlined />;
+      default:
+        return <ClockCircleOutlined />;
+    }
+  };
+
   const columns = [
+    {
+      title: 'Request ID',
+      dataIndex: 'requestID',
+      key: 'requestID',
+      sorter: (a, b) => a.requestID.localeCompare(b.requestID)
+    },
     {
       title: 'Server Name',
       dataIndex: 'serverName',
@@ -202,399 +369,358 @@ const AdminDashboard = () => {
       key: 'requesterDepartment'
     },
     {
-      title: 'Job Description',
-      dataIndex: 'requesterJobDescription',
-      key: 'requesterJobDescription'
-    },
-    {
-      title: 'Phone',
-      dataIndex: 'requesterPhone',
-      key: 'requesterPhone'
-    },
-    {
-      title: 'Department Head',
-      dataIndex: 'departmentHeadEmail',
-      key: 'departmentHeadEmail',
-      render: (email, record) => (
-        <span>
-          {record.departmentHeadFirstName} {record.departmentHeadLastName}
-          <br />
-          <Text type="secondary">{email}</Text>
-        </span>
-      )
-    },
-    {
-      title: 'Dept Head Department',
-      dataIndex: 'departmentHeadDepartment',
-      key: 'departmentHeadDepartment'
-    },
-    {
-      title: 'Dept Head Phone',
-      dataIndex: 'departmentHeadPhone',
-      key: 'departmentHeadPhone'
-    },
-    {
-      title: 'Data Classification',
-      dataIndex: 'dataClassification',
-      key: 'dataClassification'
-    },
-    {
-      title: 'Duration Type',
-      dataIndex: 'exceptionDurationType',
-      key: 'exceptionDurationType'
-    },
-    {
-      title: 'Users Affected',
-      dataIndex: 'usersAffected',
-      key: 'usersAffected'
-    },
-    {
-      title: 'Data at Risk',
-      dataIndex: 'dataAtRisk',
-      key: 'dataAtRisk'
-    },
-    {
-      title: 'Vulnerabilities',
-      dataIndex: 'vulnerabilities',
-      key: 'vulnerabilities',
-      render: (vulnerabilities) => {
-        if (!vulnerabilities) return 'N/A';
-        const vulnArray = typeof vulnerabilities === 'string' 
-          ? JSON.parse(vulnerabilities) 
-          : vulnerabilities;
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status, record) => {
+        const statusColor = {
+          'APPROVED': 'green',
+          'DECLINED': 'red',
+          'NEED_MORE_INFO': 'orange',
+          'PENDING': 'blue'
+        };
+        
+        // Status should be PENDING unless:
+        // 1. Request is declined
+        // 2. CISO has approved (final phase)
+        let displayStatus = status;
+        if (status === 'APPROVED' && (!record.approvalPhase || record.approvalPhase !== 'COMPLETED')) {
+          displayStatus = 'PENDING';
+        }
+        
         return (
-          <div style={{ maxWidth: '200px' }}>
-            {vulnArray.map((vuln, index) => (
-              <Tag key={index} color="orange" style={{ marginBottom: '4px' }}>
-                {vuln.name || vuln}
-              </Tag>
-            ))}
-          </div>
+          <Tag color={statusColor[displayStatus] || 'default'}>
+            {displayStatus}
+          </Tag>
         );
       }
     },
     {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status) => getStatusTag(status)
+      title: 'Phase',
+      dataIndex: 'approvalPhase',
+      key: 'approvalPhase',
+      render: (phase) => getPhaseTag(phase)
     },
     {
-      title: 'Request Date',
-      dataIndex: 'requestedDate',
-      key: 'requestedDate',
-      render: (date) => formatTimestamp(date),
-      sorter: (a, b) => new Date(a.requestedDate) - new Date(b.requestedDate)
-    },
-    {
-      title: 'Expiration Date',
-      dataIndex: 'expirationDate',
-      key: 'expirationDate',
-      render: (date) => formatTimestamp(date),
-      sorter: (a, b) => {
-        if (!a.expirationDate) return 1;
-        if (!b.expirationDate) return -1;
-        return new Date(a.expirationDate) - new Date(b.expirationDate);
-      }
+      title: 'Created',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (timestamp) => formatTimestamp(timestamp)
     },
     {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
-        <Space size="small">
-          <Button 
-            type="primary"
-            onClick={() => handleViewDetails(record)}
-          >
-            View Details
-          </Button>
-          {record.status === 'pending' && (
-            <>
-              <Button 
-                type="primary"
-                icon={<CheckCircleOutlined />}
-                onClick={() => handleApprove(record)}
-                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-              >
-                Approve
-              </Button>
-              <Button 
-                type="primary"
-                danger
-                icon={<CloseCircleOutlined />}
-                onClick={() => handleDecline(record)}
-              >
-                Decline
-              </Button>
-            </>
-          )}
-        </Space>
+        <Button type="primary" onClick={() => handleViewDetails(record)}>
+          View Details
+        </Button>
       )
     }
   ];
 
-  const renderExceptionRequestsTab = () => (
-    <div>
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col span={8}>
-          <Input
-            placeholder="Search in all fields..."
-            prefix={<SearchOutlined />}
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            allowClear
-          />
-        </Col>
-        <Col span={4}>
-          <Select
-            style={{ width: '100%' }}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            placeholder="Filter by status"
+  const renderActionButtons = (request) => {
+    // Only show action buttons if the request is in the current phase and not already approved/declined
+    const canTakeAction = request.status !== 'APPROVED' && request.status !== 'DECLINED';
+    
+    return (
+      <div style={{ marginTop: 16, textAlign: 'right' }}>
+        <Space>
+          <Button
+            type="default"
+            onClick={() => setModalVisible(false)}
           >
-            <Option value="all">All Statuses</Option>
-            <Option value="pending">Pending</Option>
-            <Option value="approved">Approved</Option>
-            <Option value="declined">Declined</Option>
-          </Select>
-        </Col>
-        <Col span={4}>
-          <Select
-            style={{ width: '100%' }}
-            value={typeFilter}
-            onChange={setTypeFilter}
-            placeholder="Filter by type"
-          >
-            <Option value="all">All Types</Option>
-            <Option value="Vulnerability">Vulnerability</Option>
-            <Option value="Standard">Standard</Option>
-          </Select>
-        </Col>
-      </Row>
+            Close
+          </Button>
+          {canTakeAction && (
+            <>
+              <Button
+                type="primary"
+                onClick={() => handleApprove(request)}
+                loading={updating}
+                icon={<CheckCircleOutlined />}
+              >
+                Approve
+              </Button>
+              <Button
+                danger
+                onClick={() => handleDecline(request)}
+                loading={updating}
+                icon={<CloseCircleOutlined />}
+              >
+                {showDeclineForm ? 'Submit Decline' : 'Decline'}
+              </Button>
+              <Button
+                type="default"
+                onClick={() => handleNeedMoreInfo(request)}
+                loading={updating}
+                icon={<InfoCircleOutlined />}
+              >
+                {showMoreInfoForm ? 'Submit Request' : 'Need More Info'}
+              </Button>
+            </>
+          )}
+        </Space>
+      </div>
+    );
+  };
 
-      <Table
-        columns={columns}
-        dataSource={filterRequests(exceptionRequests)}
-        rowKey="id"
-        loading={loading}
-        scroll={{ x: true }}
-        pagination={{
-          pageSize: 10,
-          showSizeChanger: true,
-          showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`
-        }}
-      />
+  const renderApprovalHistory = (request) => {
+    return (
+      <div style={{ marginTop: 16 }}>
+        <Title level={5}>Approval History</Title>
+        <Timeline>
+          {request.isoStatus && (
+            <Timeline.Item 
+              color={request.isoStatus === 'APPROVED' ? 'green' : request.isoStatus === 'DECLINED' ? 'red' : 'blue'}
+              dot={getStatusIcon(request.isoStatus)}
+            >
+              <Text strong>ISO Review</Text>
+              <br />
+              <Text>Status: {request.isoStatus}</Text>
+              {request.isoComments && (
+                <>
+                  <br />
+                  <Text>Comments: {request.isoComments}</Text>
+                </>
+              )}
+              {request.isoReviewDate && (
+                <>
+                  <br />
+                  <Text type="secondary">{formatTimestamp(request.isoReviewDate)}</Text>
+                </>
+              )}
+            </Timeline.Item>
+          )}
+          
+          {request.deptHeadStatus && (
+            <Timeline.Item 
+              color={request.deptHeadStatus === 'APPROVED' ? 'green' : request.deptHeadStatus === 'DECLINED' ? 'red' : 'blue'}
+              dot={getStatusIcon(request.deptHeadStatus)}
+            >
+              <Text strong>Department Head Review</Text>
+              <br />
+              <Text>Status: {request.deptHeadStatus}</Text>
+              {request.deptHeadComments && (
+                <>
+                  <br />
+                  <Text>Comments: {request.deptHeadComments}</Text>
+                </>
+              )}
+              {request.deptHeadReviewDate && (
+                <>
+                  <br />
+                  <Text type="secondary">{formatTimestamp(request.deptHeadReviewDate)}</Text>
+                </>
+              )}
+            </Timeline.Item>
+          )}
+          
+          {request.cisoStatus && (
+            <Timeline.Item 
+              color={request.cisoStatus === 'APPROVED' ? 'green' : request.cisoStatus === 'DECLINED' ? 'red' : 'blue'}
+              dot={getStatusIcon(request.cisoStatus)}
+            >
+              <Text strong>CISO Review</Text>
+              <br />
+              <Text>Status: {request.cisoStatus}</Text>
+              {request.cisoComments && (
+                <>
+                  <br />
+                  <Text>Comments: {request.cisoComments}</Text>
+                </>
+              )}
+              {request.cisoReviewDate && (
+                <>
+                  <br />
+                  <Text type="secondary">{formatTimestamp(request.cisoReviewDate)}</Text>
+                </>
+              )}
+            </Timeline.Item>
+          )}
+        </Timeline>
+      </div>
+    );
+  };
+
+  const renderExceptionRequestsTab = () => (
+    <Card>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <Row gutter={[16, 16]}>
+          <Col span={8}>
+            <Input
+              placeholder="Search requests..."
+              prefix={<SearchOutlined />}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
+          </Col>
+          <Col span={4}>
+            <Select
+              style={{ width: '100%' }}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            >
+              <Option value="all">All Statuses</Option>
+              <Option value="pending">Pending</Option>
+              <Option value="approved">Approved</Option>
+              <Option value="declined">Declined</Option>
+              <Option value="need_more_info">Need More Info</Option>
+            </Select>
+          </Col>
+          <Col span={4}>
+            <Select
+              style={{ width: '100%' }}
+              value={typeFilter}
+              onChange={setTypeFilter}
+            >
+              <Option value="all">All Types</Option>
+              <Option value="Standard">Standard</Option>
+              <Option value="Vulnerability">Vulnerability</Option>
+            </Select>
+          </Col>
+          <Col span={4}>
+            <Select
+              style={{ width: '100%' }}
+              value={phaseFilter}
+              onChange={setPhaseFilter}
+            >
+              <Option value="all">All Phases</Option>
+              <Option value="ISO_REVIEW">ISO Review</Option>
+              <Option value="DEPARTMENT_HEAD_REVIEW">Department Head Review</Option>
+              <Option value="CISO_REVIEW">CISO Review</Option>
+              <Option value="COMPLETED">Completed</Option>
+            </Select>
+          </Col>
+        </Row>
+
+        <Table
+          columns={columns}
+          dataSource={filterRequests(exceptionRequests)}
+          rowKey="id"
+          loading={loading}
+          pagination={{ pageSize: 10 }}
+        />
+      </Space>
 
       <Modal
         title="Exception Request Details"
         open={modalVisible}
-        onCancel={() => {
-          setModalVisible(false);
-          setShowDeclineForm(false);
-          setDeclineReason('');
-        }}
+        onCancel={() => setModalVisible(false)}
         footer={null}
-        width={700}
+        width={800}
       >
         {selectedRequest && (
-          <>
-            {console.log('Selected Request:', selectedRequest)}
-            {console.log('Request Status:', selectedRequest.status)}
-            <div>
-              <div className="mb-4">
-                <Text strong>Server Name: </Text>
-                <Text>{selectedRequest.serverName}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Status: </Text>
-                {getStatusTag(selectedRequest.status)}
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Requester: </Text>
-                <Text>{selectedRequest.requesterFirstName} {selectedRequest.requesterLastName}</Text>
-                <br />
-                <Text type="secondary">{selectedRequest.requesterEmail}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Department: </Text>
-                <Text>{selectedRequest.requesterDepartment}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Job Description: </Text>
-                <Text>{selectedRequest.requesterJobDescription}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Department Head: </Text>
-                <Text>{selectedRequest.departmentHeadFirstName} {selectedRequest.departmentHeadLastName}</Text>
-                <br />
-                <Text type="secondary">{selectedRequest.departmentHeadEmail}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Data Classification: </Text>
-                <Text>{selectedRequest.dataClassification}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Exception Type: </Text>
-                <Tag color={selectedRequest.exceptionType === 'Vulnerability' ? 'orange' : 'blue'}>
-                  {selectedRequest.exceptionType}
-                </Tag>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Duration Type: </Text>
-                <Text>{selectedRequest.exceptionDurationType}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Users Affected: </Text>
-                <Text>{selectedRequest.usersAffected}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Data at Risk: </Text>
-                <Text>{selectedRequest.dataAtRisk}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Vulnerabilities: </Text>
-                <div>
-                  {selectedRequest.vulnerabilities?.map((vuln, index) => (
-                    <Tag key={index} color="orange" style={{ marginBottom: '4px' }}>
-                      {vuln.name || vuln}
-                    </Tag>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Justification: </Text>
-                <Text>{selectedRequest.justification}</Text>
-              </div>
-              
-              <div className="mb-4">
-                <Text strong>Mitigation: </Text>
-                <Text>{selectedRequest.mitigation}</Text>
-              </div>
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Row gutter={[16, 16]}>
+              <Col span={12}>
+                <Title level={5}>Request Information</Title>
+                <Paragraph>
+                  <Text strong>Request ID:</Text> {selectedRequest.requestID || 'N/A'}<br />
+                  <Text strong>Server Name:</Text> {selectedRequest.serverName}<br />
+                  <Text strong>Status:</Text> {getStatusTag(selectedRequest.status)}<br />
+                  <Text strong>Phase:</Text> {getPhaseTag(selectedRequest.approvalPhase)}<br />
+                  <Text strong>Created:</Text> {formatTimestamp(selectedRequest.createdAt)}<br />
+                  <Text strong>Last Updated:</Text> {formatTimestamp(selectedRequest.updatedAt)}
+                </Paragraph>
+              </Col>
+              <Col span={12}>
+                <Title level={5}>Requester Information</Title>
+                <Paragraph>
+                  <Text strong>Name:</Text> {selectedRequest.requesterFirstName} {selectedRequest.requesterLastName}<br />
+                  <Text strong>Email:</Text> {selectedRequest.requesterEmail}<br />
+                  <Text strong>Department:</Text> {selectedRequest.requesterDepartment}<br />
+                  <Text strong>Job Description:</Text> {selectedRequest.requesterJobDescription}
+                </Paragraph>
+              </Col>
+            </Row>
 
-              {/* Action Buttons - Moved inside the main content div */}
-              <div style={{ marginTop: '24px', borderTop: '1px solid #f0f0f0', paddingTop: '16px' }}>
-                {console.log('Rendering buttons section')}
-                {console.log('Status check:', selectedRequest.status === 'pending')}
-                {console.log('Show decline form:', showDeclineForm)}
-                
-                {(selectedRequest.status === 'pending' || selectedRequest.status === 'Pending') && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                    {!showDeclineForm ? (
-                      <>
-                        <Button 
-                          type="primary"
-                          style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                          icon={<CheckCircleOutlined />}
-                          onClick={() => handleApprove(selectedRequest)}
-                          loading={updating}
-                        >
-                          Approve
-                        </Button>
-                        <Button 
-                          type="primary"
-                          danger
-                          icon={<CloseCircleOutlined />}
-                          onClick={() => handleDecline(selectedRequest)}
-                          loading={updating}
-                        >
-                          Decline
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button onClick={() => setShowDeclineForm(false)}>
-                          Cancel
-                        </Button>
-                        <Button 
-                          type="primary" 
-                          danger
-                          onClick={() => handleDecline(selectedRequest)}
-                          loading={updating}
-                          disabled={!declineReason}
-                        >
-                          Confirm Decline
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+            <Row gutter={[16, 16]}>
+              <Col span={12}>
+                <Title level={5}>Department Head Information</Title>
+                <Paragraph>
+                  <Text strong>Name:</Text> {selectedRequest.departmentHeadFirstName} {selectedRequest.departmentHeadLastName}<br />
+                  <Text strong>Email:</Text> {selectedRequest.departmentHeadEmail}<br />
+                  <Text strong>Department:</Text> {selectedRequest.departmentHeadDepartment}<br />
+                  <Text strong>Job Description:</Text> {selectedRequest.departmentHeadJobDescription}
+                </Paragraph>
+              </Col>
+              <Col span={12}>
+                <Title level={5}>Request Details</Title>
+                <Paragraph>
+                  <Text strong>Data Classification:</Text> {selectedRequest.dataClassification}<br />
+                  <Text strong>Users Affected:</Text> {selectedRequest.usersAffected}<br />
+                  <Text strong>Data at Risk:</Text> {selectedRequest.dataAtRisk}<br />
+                  <Text strong>Exception Duration:</Text> {selectedRequest.exceptionDurationType}<br />
+                  <Text strong>Expiration Date:</Text> {selectedRequest.expirationDate}
+                </Paragraph>
+              </Col>
+            </Row>
 
-              {/* Decline Form */}
-              {showDeclineForm && (
-                <div style={{ marginTop: '16px' }}>
-                  <TextArea
-                    placeholder="Enter reason for declining..."
-                    value={declineReason}
-                    onChange={e => setDeclineReason(e.target.value)}
-                    rows={4}
-                  />
-                </div>
-              )}
-            </div>
-          </>
+            <Title level={5}>Justification</Title>
+            <Paragraph>{selectedRequest.justification}</Paragraph>
+
+            <Title level={5}>Mitigation</Title>
+            <Paragraph>{selectedRequest.mitigation}</Paragraph>
+
+            {renderApprovalHistory(selectedRequest)}
+
+            {showDeclineForm && (
+              <div style={{ marginTop: 16 }}>
+                <Title level={5}>Reason for Decline</Title>
+                <TextArea
+                  rows={4}
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  placeholder="Please provide a reason for declining this request..."
+                />
+              </div>
+            )}
+
+            {showMoreInfoForm && (
+              <div style={{ marginTop: 16 }}>
+                <Title level={5}>Additional Information Needed</Title>
+                <TextArea
+                  rows={4}
+                  value={moreInfoReason}
+                  onChange={(e) => setMoreInfoReason(e.target.value)}
+                  placeholder="Please specify what additional information is needed..."
+                />
+              </div>
+            )}
+
+            {renderActionButtons(selectedRequest)}
+          </Space>
         )}
       </Modal>
-    </div>
+    </Card>
   );
 
-  const items = [
-    {
-      key: 'exception-requests',
-      label: (
-        <span>
-          <FileTextOutlined />
-          Exception Requests Dashboard
-        </span>
-      ),
-      children: (
-        <div>
-          {renderExceptionRequestsTab()}
-        </div>
-      )
-    },
-    {
-      key: 'external-scans',
-      label: (
-        <span>
-          <ScanOutlined />
-          External Scans
-        </span>
-      ),
-      children: <ExternalScans />,
-    },
-  ];
-
   return (
-    <div className="p-6">
-      <Card className="shadow-sm">
-        <div className="flex justify-between items-center mb-4">
-          <Title level={4}>
-            <Space>
-              <DashboardOutlined />
-              Admin Dashboard
-            </Space>
-          </Title>
-        </div>
-        
-        <Paragraph className="text-gray-600 mb-4">
-          Welcome to the Admin Dashboard. Manage exception requests and external scans below.
-        </Paragraph>
-        
-        <Tabs defaultActiveKey="exception-requests" items={items} />
-      </Card>
+    <div style={{ padding: '24px' }}>
+      <Tabs defaultActiveKey="exceptionRequests">
+        <Tabs.TabPane
+          tab={
+            <span>
+              <FileTextOutlined />
+              Exception Requests
+            </span>
+          }
+          key="exceptionRequests"
+        >
+          {renderExceptionRequestsTab()}
+        </Tabs.TabPane>
+        <Tabs.TabPane
+          tab={
+            <span>
+              <ScanOutlined />
+              External Scans
+            </span>
+          }
+          key="externalScans"
+        >
+          <ExternalScans />
+        </Tabs.TabPane>
+      </Tabs>
     </div>
   );
 };

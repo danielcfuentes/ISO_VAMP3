@@ -17,8 +17,9 @@ import os
 import subprocess
 from database.sql_server_config import execute_query
 import pyodbc
-from email_utils import send_confirmation_email, send_security_notification
+from email_utils import send_confirmation_email, send_security_notification, send_approval_email, send_decline_email, send_need_more_info_email, send_status_update_email
 import threading
+import win32com.client
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -1782,13 +1783,14 @@ def create_exception_request():
             
             # Get the ID of the newly inserted request
             get_id_query = """
-            SELECT TOP 1 ID 
+            SELECT TOP 1 ID, RequestID
             FROM VulnerabilityExceptionRequests 
             WHERE RequestedBy = ? 
             ORDER BY CreatedAt DESC
             """
             result = execute_query(get_id_query, (username,), fetch=True)
             request_id = result[0]['ID'] if result else None
+            request_number = result[0]['RequestID'] if result else None
             
             if not request_id:
                 logging.error("Failed to get the ID of the newly created request")
@@ -1800,6 +1802,7 @@ def create_exception_request():
             # Prepare request data for email
             request_data = {
                 'id': request_id,
+                'requestID': request_number,  # Add the RequestID
                 'serverName': data.get('serverName'),
                 'requesterFirstName': data.get('requesterFirstName'),
                 'requesterLastName': data.get('requesterLastName'),
@@ -1889,6 +1892,7 @@ def get_exception_requests():
         query = """
         SELECT 
             ID,
+            RequestID,
             ServerName,
             RequesterFirstName,
             RequesterLastName,
@@ -1952,6 +1956,7 @@ def get_exception_requests():
             
             exception_request = {
                 'id': row['ID'],
+                'requestID': row['RequestID'] if row['RequestID'] else None,  # Handle potential NULL values
                 'serverName': row['ServerName'],
                 'requesterFirstName': row['RequesterFirstName'],
                 'requesterLastName': row['RequesterLastName'],
@@ -2014,6 +2019,7 @@ def get_all_exception_requests():
         query = """
         SELECT 
             ID,
+            RequestID,
             ServerName,
             RequesterFirstName,
             RequesterLastName,
@@ -2071,6 +2077,7 @@ def get_all_exception_requests():
             
             exception_request = {
                 'id': row['ID'],
+                'requestID': row['RequestID'] if row['RequestID'] else None,  # Handle potential NULL values
                 'serverName': row['ServerName'],
                 'requesterFirstName': row['RequesterFirstName'],
                 'requesterLastName': row['RequesterLastName'],
@@ -2215,6 +2222,478 @@ def get_user_info(username):
         return jsonify({
             'success': False,
             'message': f'Error fetching user info: {str(e)}'
+        }), 500
+
+@app.route('/api/exception-requests/<int:request_id>/update-status', methods=['PUT'])
+@login_required
+def update_exception_request_status(request_id):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'}), 400
+
+        status = data.get('status')
+        comments = data.get('comments', '')
+
+        # Validate status
+        if status not in ['APPROVED', 'DECLINED', 'NEED_MORE_INFO']:
+            return jsonify({'success': False, 'message': 'Invalid status provided'}), 400
+
+        # Get current request data
+        query = """
+        SELECT * FROM VulnerabilityExceptionRequests WHERE ID = ?
+        """
+        result = execute_query(query, (request_id,), fetch=True)
+        
+        if not result:
+            return jsonify({'success': False, 'message': 'Exception request not found'}), 404
+
+        request_data = result[0]
+        username = session.get('username')
+
+        # Get user info for email notifications
+        user_query = """
+        SELECT FirstName, LastName, DepartmentJobTitle
+        FROM ISODepot.dbo.Persons
+        WHERE ADUserName = ?
+        """
+        user_result = execute_query(user_query, (username,), fetch=True)
+        reviewer_name = f"{user_result[0]['FirstName']} {user_result[0]['LastName']}" if user_result else username
+        reviewer_role = user_result[0]['DepartmentJobTitle'] if user_result else None
+
+        # Determine current phase based on approval statuses
+        current_phase = 'ISO_REVIEW'  # Default phase
+        if request_data['ISO_Status'] is not None:
+            if request_data['ISO_Status'] == 'APPROVED':
+                current_phase = 'DEPARTMENT_HEAD_REVIEW'
+            if request_data['DeptHead_Status'] is not None:
+                if request_data['DeptHead_Status'] == 'APPROVED':
+                    current_phase = 'CISO_REVIEW'
+                if request_data['CISO_Status'] is not None and request_data['CISO_Status'] == 'APPROVED':
+                    current_phase = 'COMPLETED'
+
+        # Determine next phase based on current phase and status
+        next_phase = current_phase
+        if status == 'APPROVED':
+            if current_phase == 'ISO_REVIEW':
+                next_phase = 'DEPARTMENT_HEAD_REVIEW'
+            elif current_phase == 'DEPARTMENT_HEAD_REVIEW':
+                next_phase = 'CISO_REVIEW'
+            elif current_phase == 'CISO_REVIEW':
+                next_phase = 'COMPLETED'
+
+        # Update status based on current phase
+        if current_phase == 'ISO_REVIEW':
+            update_query = """
+                UPDATE VulnerabilityExceptionRequests 
+                SET Status = ?,
+                    ISO_Status = ?,
+                    ISO_Comments = ?,
+                    ISO_ReviewedBy = ?,
+                    ISO_ReviewDate = GETDATE(),
+                    LastModifiedBy = ?,
+                    ApprovalPhase = ?,
+                    UpdatedAt = GETDATE()
+                WHERE ID = ?
+            """
+            params = (status, status, comments, username, username, next_phase, request_id)
+            
+        elif current_phase == 'DEPARTMENT_HEAD_REVIEW':
+            update_query = """
+                UPDATE VulnerabilityExceptionRequests 
+                SET Status = ?,
+                    DeptHead_Status = ?,
+                    DeptHead_Comments = ?,
+                    DeptHead_ReviewedBy = ?,
+                    DeptHead_ReviewDate = GETDATE(),
+                    LastModifiedBy = ?,
+                    ApprovalPhase = ?,
+                    UpdatedAt = GETDATE()
+                WHERE ID = ?
+            """
+            params = (status, status, comments, username, username, next_phase, request_id)
+            
+        elif current_phase == 'CISO_REVIEW':
+            update_query = """
+                UPDATE VulnerabilityExceptionRequests 
+                SET Status = ?,
+                    CISO_Status = ?,
+                    CISO_Comments = ?,
+                    CISO_ReviewedBy = ?,
+                    CISO_ReviewDate = GETDATE(),
+                    LastModifiedBy = ?,
+                    ApprovalPhase = ?,
+                    UpdatedAt = GETDATE()
+                WHERE ID = ?
+            """
+            params = (status, status, comments, username, username, next_phase, request_id)
+
+        # Execute the update query
+        execute_query(update_query, params)
+
+        # Send appropriate email notification based on status and phase
+        try:
+            if status == 'APPROVED':
+                if next_phase == 'COMPLETED':  # Final approval
+                    send_approval_email(request_data, reviewer_name, reviewer_role)
+                else:  # Intermediate approval
+                    # Get next reviewer's email based on phase
+                    next_reviewer_email = None
+                    if next_phase == 'DEPARTMENT_HEAD_REVIEW':
+                        next_reviewer_email = request_data['DepartmentHeadEmail']
+                    elif next_phase == 'CISO_REVIEW':
+                        next_reviewer_email = "bstanella@utep.edu"  # CISO email
+
+                    if next_reviewer_email:
+                        # Create and send the email using Outlook
+                        outlook = win32com.client.Dispatch("Outlook.Application")
+                        mail = outlook.CreateItem(0)
+                        mail.To = next_reviewer_email
+                        mail.Subject = f"VAMP TESTING EMAIL: Exception Request Ready for Review - {request_data['RequestID']}"
+                        mail.HTMLBody = f"""
+                        <p>A vulnerability exception request requires your review.</p>
+                        <p><strong>Request ID:</strong> {request_data['RequestID']}</p>
+                        <p><strong>Server Name:</strong> {request_data['ServerName']}</p>
+                        <p><strong>Previous Approval:</strong> {current_phase} - Approved by {reviewer_name}</p>
+                        <p>Please review this request in the VaMP portal:</p>
+                        <p><a href="http://localhost:5173/exception-requests">Review Request</a></p>
+                        """
+                        mail.Send()
+            else:
+                # For declines or need more info, use existing email functions
+                if status == 'DECLINED':
+                    send_decline_email(request_data, reviewer_name, reviewer_role, comments)
+                elif status == 'NEED_MORE_INFO':
+                    send_need_more_info_email(request_data, reviewer_name, reviewer_role, comments)
+
+        except Exception as e:
+            logging.error(f"Error sending email: {str(e)}")
+            # Continue even if email fails
+            pass
+
+        return jsonify({
+            'success': True,
+            'message': f'Exception request {status.lower()} successfully',
+            'nextPhase': next_phase
+        })
+
+    except Exception as e:
+        logging.error(f"Error updating request status: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'An error occurred while updating the request status'
+        }), 500
+
+@app.route('/api/department-head/exception-requests', methods=['GET'])
+@login_required
+def get_department_head_requests():
+    """
+    Get exception requests that need department head review
+    """
+    try:
+        # Get username from session
+        username = session.get('username')
+        if not username:
+            return jsonify({
+                'success': False,
+                'message': 'User not authenticated'
+            }), 401
+
+        # Get requests where the current user is the department head
+        query = """
+        SELECT * FROM VulnerabilityExceptionRequests
+        WHERE DepartmentHeadUsername = ?
+        AND ApprovalPhase = 'DEPARTMENT_HEAD_REVIEW'
+        ORDER BY CreatedAt DESC
+        """
+        
+        results = execute_query(query, (username,), fetch=True)
+        
+        if not results:
+            return jsonify({
+                'success': True,
+                'requests': []
+            }), 200
+            
+        # Format the results
+        exception_requests = []
+        for row in results:
+            # Convert datetime objects to strings
+            expiration_date = row['ExpirationDate'].strftime('%Y-%m-%d') if row['ExpirationDate'] else None
+            requested_date = row['RequestedDate'].strftime('%Y-%m-%d') if row['RequestedDate'] else None
+            created_at = row['CreatedAt'].strftime('%Y-%m-%d %H:%M:%S') if row['CreatedAt'] else None
+            updated_at = row['UpdatedAt'].strftime('%Y-%m-%d %H:%M:%S') if row['UpdatedAt'] else None
+            
+            # Parse vulnerabilities JSON
+            vulnerabilities = json.loads(row['Vulnerabilities']) if row['Vulnerabilities'] else []
+            
+            exception_request = {
+                'id': row['ID'],
+                'requestID': row['RequestID'] if row['RequestID'] else None,  # Handle potential NULL values
+                'serverName': row['ServerName'],
+                'requesterFirstName': row['RequesterFirstName'],
+                'requesterLastName': row['RequesterLastName'],
+                'requesterDepartment': row['RequesterDepartment'],
+                'requesterJobDescription': row['RequesterJobDescription'],
+                'requesterEmail': row['RequesterEmail'],
+                'requesterPhone': row['RequesterPhone'],
+                'departmentHeadUsername': row['DepartmentHeadUsername'],
+                'departmentHeadFirstName': row['DepartmentHeadFirstName'],
+                'departmentHeadLastName': row['DepartmentHeadLastName'],
+                'departmentHeadDepartment': row['DepartmentHeadDepartment'],
+                'departmentHeadJobDescription': row['DepartmentHeadJobDescription'],
+                'departmentHeadEmail': row['DepartmentHeadEmail'],
+                'departmentHeadPhone': row['DepartmentHeadPhone'],
+                'approverUsername': row['ApproverUsername'],
+                'dataClassification': row['DataClassification'],
+                'exceptionDurationType': row['ExceptionDurationType'],
+                'expirationDate': expiration_date,
+                'usersAffected': row['UsersAffected'],
+                'dataAtRisk': row['DataAtRisk'],
+                'vulnerabilities': vulnerabilities,
+                'justification': row['Justification'],
+                'mitigation': row['Mitigation'],
+                'termsAccepted': row['TermsAccepted'],
+                'status': row['Status'],
+                'declineReason': row['DeclineReason'],
+                'requestedBy': row['RequestedBy'],
+                'requestedDate': requested_date,
+                'createdAt': created_at,
+                'updatedAt': updated_at,
+                'approvalPhase': row['ApprovalPhase'],
+                'isoStatus': row['ISO_Status'],
+                'isoComments': row['ISO_Comments'],
+                'isoReviewedBy': row['ISO_ReviewedBy'],
+                'isoReviewDate': row['ISO_ReviewDate'].strftime('%Y-%m-%d %H:%M:%S') if row['ISO_ReviewDate'] else None,
+                'deptHeadStatus': row['DeptHead_Status'],
+                'deptHeadComments': row['DeptHead_Comments'],
+                'deptHeadReviewDate': row['DeptHead_ReviewDate'].strftime('%Y-%m-%d %H:%M:%S') if row['DeptHead_ReviewDate'] else None,
+                'cisoStatus': row['CISO_Status'],
+                'cisoComments': row['CISO_Comments'],
+                'cisoReviewDate': row['CISO_ReviewDate'].strftime('%Y-%m-%d %H:%M:%S') if row['CISO_ReviewDate'] else None,
+                'lastModifiedBy': row['LastModifiedBy'],
+                'resubmitted': row['Resubmitted']
+            }
+            exception_requests.append(exception_request)
+        
+        return jsonify({
+            'success': True,
+            'requests': exception_requests
+        }), 200
+        
+    except Exception as e:
+        logging.error(f"Error fetching department head requests: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching department head requests: {str(e)}'
+        }), 500
+
+@app.route('/api/user/roles', methods=['GET'])
+@login_required
+def get_user_roles():
+    """
+    Get the roles of the current user
+    """
+    try:
+        username = session.get('username')
+        if not username:
+            return jsonify({
+                'success': False,
+                'message': 'User not authenticated'
+            }), 401
+
+        # Check if user is in ISO
+        iso_query = """
+        SELECT COUNT(*) as count
+        FROM ISODepot.dbo.Persons
+        WHERE ADUserName = ?
+        AND (DepartmentName = 'Information Security Office' 
+             OR DepartmentJobTitle LIKE '%Security%'
+             OR DepartmentJobTitle LIKE '%ISO%')
+        """
+        iso_result = execute_query(iso_query, (username,), fetch=True)
+        is_iso = iso_result[0]['count'] > 0 if iso_result else False
+
+        # For testing: Always set department head to true
+        is_dept_head = True  # Temporarily set to True for testing
+
+        # Check if user is CISO
+        ciso_query = """
+        SELECT COUNT(*) as count
+        FROM ISODepot.dbo.Persons
+        WHERE ADUserName = ?
+        AND (DepartmentJobTitle = 'Chief Information Security Officer'
+             OR DepartmentJobTitle LIKE '%CISO%')
+        """
+        ciso_result = execute_query(ciso_query, (username,), fetch=True)
+        is_ciso = ciso_result[0]['count'] > 0 if ciso_result else False
+
+        # If user has admin access in session, they should be considered ISO
+        if session.get('is_admin', False):
+            is_iso = True
+
+        return jsonify({
+            'success': True,
+            'roles': {
+                'isISO': is_iso,
+                'isDepartmentHead': is_dept_head,  # Now always true for testing
+                'isCISO': is_ciso
+            }
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error getting user roles: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error getting user roles: {str(e)}'
+        }), 500
+
+@app.route('/api/exception-requests/<int:request_id>/resubmit', methods=['PUT'])
+@login_required
+def resubmit_exception_request(request_id):
+    """
+    Resubmit an exception request after it was marked as needing more information
+    """
+    try:
+        # Check if user is authorized
+        username = session.get('username')
+        if not username:
+            return jsonify({
+                'success': False,
+                'message': 'User not authenticated'
+            }), 401
+
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'message': 'No data provided'
+            }), 400
+
+        # Get the current request
+        query = """
+        SELECT * FROM VulnerabilityExceptionRequests WHERE ID = ?
+        """
+        result = execute_query(query, (request_id,), fetch=True)
+        if not result:
+            return jsonify({
+                'success': False,
+                'message': 'Request not found'
+            }), 404
+
+        request_data = result[0]
+        current_phase = request_data['ApprovalPhase']
+        resubmit_comment = data.get('resubmitComment', '')
+
+        # Update the request with new data
+        update_query = """
+        UPDATE VulnerabilityExceptionRequests
+        SET ServerName = ?,
+            RequesterFirstName = ?,
+            RequesterLastName = ?,
+            RequesterDepartment = ?,
+            RequesterJobDescription = ?,
+            RequesterEmail = ?,
+            RequesterPhone = ?,
+            DepartmentHeadUsername = ?,
+            DepartmentHeadFirstName = ?,
+            DepartmentHeadLastName = ?,
+            DepartmentHeadDepartment = ?,
+            DepartmentHeadJobDescription = ?,
+            DepartmentHeadEmail = ?,
+            DepartmentHeadPhone = ?,
+            DataClassification = ?,
+            ExceptionDurationType = ?,
+            ExpirationDate = ?,
+            UsersAffected = ?,
+            DataAtRisk = ?,
+            Vulnerabilities = ?,
+            Justification = ?,
+            Mitigation = ?,
+            Resubmitted = 1,
+            LastModifiedBy = ?,
+            Status = 'PENDING'
+        WHERE ID = ?
+        """
+        
+        params = (
+            data.get('serverName'),
+            data.get('requesterFirstName'),
+            data.get('requesterLastName'),
+            data.get('requesterDepartment'),
+            data.get('requesterJobDescription'),
+            data.get('requesterEmail'),
+            data.get('requesterPhone'),
+            data.get('departmentHeadUsername'),
+            data.get('departmentHeadFirstName'),
+            data.get('departmentHeadLastName'),
+            data.get('departmentHeadDepartment'),
+            data.get('departmentHeadJobDescription'),
+            data.get('departmentHeadEmail'),
+            data.get('departmentHeadPhone'),
+            data.get('dataClassification'),
+            data.get('exceptionDurationType'),
+            data.get('expirationDate'),
+            data.get('usersAffected'),
+            data.get('dataAtRisk'),
+            json.dumps(data.get('vulnerabilities', [])),
+            data.get('justification'),
+            data.get('mitigation'),
+            username,
+            request_id
+        )
+
+        execute_query(update_query, params)
+
+        # Get the updated request data
+        updated_query = """
+        SELECT * FROM VulnerabilityExceptionRequests WHERE ID = ?
+        """
+        updated_result = execute_query(updated_query, (request_id,), fetch=True)
+        updated_data = updated_result[0]
+
+        # Send notification email to the appropriate reviewer based on phase
+        try:
+            if current_phase == 'ISO_REVIEW':
+                reviewer_email = "dcfuentes@miners.utep.edu"
+            elif current_phase == 'DEPARTMENT_HEAD_REVIEW':
+                reviewer_email = updated_data['DepartmentHeadEmail']
+            elif current_phase == 'CISO_REVIEW':
+                reviewer_email = "bstanella@utep.edu"
+            else:
+                reviewer_email = None
+
+            if reviewer_email:
+                # Create and send the email using Outlook
+                outlook = win32com.client.Dispatch("Outlook.Application")
+                mail = outlook.CreateItem(0)
+                mail.To = reviewer_email
+                mail.Subject = f"Request Resubmitted - {updated_data['RequestID']}"
+                mail.HTMLBody = f"""
+                <p>A vulnerability exception request has been resubmitted and requires your review.</p>
+                <p><strong>Request ID:</strong> {updated_data['RequestID']}</p>
+                <p><strong>Server Name:</strong> {updated_data['ServerName']}</p>
+                <p><strong>Requester:</strong> {updated_data['RequesterFirstName']} {updated_data['RequesterLastName']}</p>
+                <p><strong>Resubmission Comment:</strong> {resubmit_comment}</p>
+                <p>Please review the updated request in the VaMP portal.</p>
+                <p><a href="http://localhost:5173/exception-requests">View Request</a></p>
+                """
+                mail.Send()
+
+        except Exception as e:
+            logging.error(f"Error sending resubmission email: {str(e)}")
+            # Continue even if email fails
+
+        return jsonify({
+            'success': True,
+            'message': 'Request resubmitted successfully'
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error resubmitting exception request: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error resubmitting exception request: {str(e)}'
         }), 500
 
 # =============================================================================

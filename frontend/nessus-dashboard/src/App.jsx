@@ -5,6 +5,7 @@ import MainLayout from './components/MainLayout';
 import Dashboard from './components/Dashboard';
 import ExceptionRequests from './components/ExceptionRequests';
 import AdminDashboard from './components/AdminDashboard';
+import DepartmentHeadDashboard from './components/DepartmentHeadDashboard';
 import Login from './components/Login';
 import nessusService from './services/nessusService';
 import './styles/theme.css';  // Import UTEP theme
@@ -16,6 +17,27 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(
     localStorage.getItem('isAdmin') === 'true'
   );
+  const [userRoles, setUserRoles] = useState(null);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchUserRoles();
+    }
+  }, [isAuthenticated]);
+
+  const fetchUserRoles = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/user/roles', {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserRoles(data.roles);
+      }
+    } catch (error) {
+      console.error('Error fetching user roles:', error);
+    }
+  };
 
   const handleLoginSuccess = (isAdmin = false) => {
     localStorage.setItem('isAuthenticated', 'true');
@@ -28,10 +50,12 @@ function App() {
       await nessusService.logout();
       setIsAuthenticated(false);
       setIsAdmin(false);
+      setUserRoles(null);
     } catch (error) {
       console.error('Error logging out:', error);
       setIsAuthenticated(false);
       setIsAdmin(false);
+      setUserRoles(null);
     }
   };
 
@@ -42,7 +66,7 @@ function App() {
     if (requiresAdmin && !isAdmin) {
       return <Navigate to="/my-agents" replace />;
     }
-    return <MainLayout isAdmin={isAdmin} onLogout={handleLogout}>{children}</MainLayout>;
+    return <MainLayout isAdmin={isAdmin} isDepartmentHead={true} onLogout={handleLogout}>{children}</MainLayout>;
   };
 
   return (
@@ -72,6 +96,12 @@ function App() {
           <Route path="/admin-dashboard" element={
             <ProtectedRoute requiresAdmin={true}>
               <AdminDashboard />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/department-head-dashboard" element={
+            <ProtectedRoute>
+              <DepartmentHeadDashboard />
             </ProtectedRoute>
           } />
           

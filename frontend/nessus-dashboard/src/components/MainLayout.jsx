@@ -18,7 +18,7 @@ import Footer from './Footer';
 const { Content, Sider } = Layout;
 const { Link } = Typography;
 
-const MainLayout = ({ children, isAdmin, onLogout }) => {
+const MainLayout = ({ children, isAdmin, isDepartmentHead, onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -38,6 +38,13 @@ const MainLayout = ({ children, isAdmin, onLogout }) => {
         key: '/admin-dashboard',
         icon: <DashboardOutlined />,
         label: 'Server Administration',
+      }
+    ] : []),
+    ...(isDepartmentHead ? [
+      {
+        key: '/department-head-dashboard',
+        icon: <DashboardOutlined />,
+        label: 'Department Head Dashboard',
       }
     ] : []),
     {
@@ -142,7 +149,8 @@ const MainLayout = ({ children, isAdmin, onLogout }) => {
 
 MainLayout.propTypes = {
   children: PropTypes.node.isRequired,
-  isAdmin: PropTypes.bool.isRequired,
+  isAdmin: PropTypes.bool,
+  isDepartmentHead: PropTypes.bool,
   onLogout: PropTypes.func.isRequired,
 };
 
