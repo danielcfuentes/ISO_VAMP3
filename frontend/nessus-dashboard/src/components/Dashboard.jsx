@@ -557,13 +557,6 @@ const Dashboard = () => {
                 disabled={!scanStates[record.name] || scanStates[record.name].status !== 'completed'}
               />
             </Tooltip>
-            <Tooltip title="Delete Server">
-              <Button
-                icon={<DeleteOutlined />}
-                onClick={() => handleDeleteClick(record)}
-                danger
-              />
-            </Tooltip>
           </Space>
         ),
       },
@@ -641,13 +634,6 @@ const Dashboard = () => {
                 onClick={() => handleDownloadReport(record)}
                 loading={downloadLoading[record.name]}
                 disabled={!externalScanStates[record.name] || externalScanStates[record.name].status !== 'completed'}
-              />
-            </Tooltip>
-            <Tooltip title="Delete Server">
-              <Button
-                icon={<DeleteOutlined />}
-                onClick={() => handleDeleteClick(record)}
-                danger
               />
             </Tooltip>
           </Space>
