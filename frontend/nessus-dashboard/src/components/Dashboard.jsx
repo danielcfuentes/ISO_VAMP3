@@ -28,6 +28,72 @@ const Dashboard = () => {
   const [setupModalVisible, setSetupModalVisible] = useState(false);
   const username = localStorage.getItem('username') || 'HOSTNAME';
 
+  // Add periodic scan state refresh every 10 minutes
+  useEffect(() => {
+    const fetchAllScanStates = async () => {
+      try {
+        const isExternal = activeTab === 'external';
+        const updatedStates = {};
+        
+        for (const server of servers) {
+          try {
+            if (isExternal) {
+              const externalScans = await nessusService.getExternalScans();
+              const serverExternalScan = externalScans.find(scan => scan.name === server.name);
+              if (serverExternalScan) {
+                updatedStates[server.name] = {
+                  scanId: serverExternalScan.id,
+                  status: serverExternalScan.status,
+                  progress: 0,
+                  startTime: serverExternalScan.start_time,
+                  endTime: serverExternalScan.end_time,
+                  hosts: serverExternalScan.hosts
+                };
+              }
+            } else {
+              const internalScan = await nessusService.findScanByServerName(server.name);
+              if (internalScan) {
+                const status = await nessusService.getScanStatus(internalScan.id);
+                updatedStates[server.name] = {
+                  scanId: internalScan.id,
+                  status: status.status,
+                  progress: status.progress || 0
+                };
+              }
+            }
+          } catch (error) {
+            console.error(`Error fetching scan state for ${server.name}:`, error);
+          }
+        }
+
+        if (isExternal) {
+          setExternalScanStates(prev => ({
+            ...prev,
+            ...updatedStates
+          }));
+        } else {
+          setInternalScanStates(prev => ({
+            ...prev,
+            ...updatedStates
+          }));
+        }
+      } catch (error) {
+        console.error('Error fetching all scan states:', error);
+      }
+    };
+
+    // Initial fetch
+    if (servers.length > 0) {
+      fetchAllScanStates();
+    }
+
+    // Set up 10-minute interval
+    const intervalId = setInterval(fetchAllScanStates, 10 * 60 * 1000);
+
+    // Cleanup interval on unmount
+    return () => clearInterval(intervalId);
+  }, [servers, activeTab]);
+
   // Initialize loading state for all servers when servers list changes
   useEffect(() => {
     const initialLoadingState = {};
