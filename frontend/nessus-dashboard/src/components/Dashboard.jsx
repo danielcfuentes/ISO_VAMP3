@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Layout, Space, Tag, Typography, message, Tooltip, Tabs, Input, Collapse } from 'antd';
+import { Table, Button, Layout, Space, Tag, Typography, message, Tooltip, Tabs, Input, Collapse, Modal } from 'antd';
 import { PlayCircleOutlined, DownloadOutlined, DeleteOutlined, BugOutlined, StopOutlined, CopyOutlined } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
@@ -25,6 +25,7 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('internal');
   const [copySuccess, setCopySuccess] = useState(false);
   const [scanStatusLoading, setScanStatusLoading] = useState({});
+  const [setupModalVisible, setSetupModalVisible] = useState(false);
   const username = localStorage.getItem('username') || 'HOSTNAME';
 
   // Initialize loading state for all servers when servers list changes
@@ -672,16 +673,53 @@ const Dashboard = () => {
               <Typography.Text type="secondary">
                 Your username is automatically included in the linking key
               </Typography.Text>
-              <Button 
-                icon={<CopyOutlined />} 
-                onClick={handleCopyKey}
-                type={copySuccess ? 'primary' : 'default'}
-              >
-                {copySuccess ? 'Copied!' : 'Copy'}
-              </Button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button 
+                  icon={<CopyOutlined />} 
+                  onClick={handleCopyKey}
+                  type={copySuccess ? 'primary' : 'default'}
+                >
+                  {copySuccess ? 'Copied!' : 'Copy'}
+                </Button>
+                <Button type="primary" onClick={() => setSetupModalVisible(true)}>
+                  Setup Instructions
+                </Button>
+              </div>
             </div>
           </Panel>
         </Collapse>
+
+        <Modal
+          title="Agent Setup Instructions"
+          visible={setupModalVisible}
+          onCancel={() => setSetupModalVisible(false)}
+          footer={null}
+        >
+          <ol style={{ paddingLeft: 20 }}>
+            <li style={{ marginBottom: 12 }}>
+              Get an installer from the{' '}
+              <a href="https://www.tenable.com/downloads/nessus-agents?loginAttempted=true" target="_blank" rel="noopener noreferrer">
+                Nessus Agent Download page
+              </a>.
+            </li>
+            <li style={{ marginBottom: 12 }}>
+              Install the agent on your targets manually, via Group Policy, SCCM, or other third-party software deployment application.
+            </li>
+            <li style={{ marginBottom: 12 }}>
+              During installation, use the following options to link to this manager:
+              <pre style={{ background: '#f5f5f5', padding: 10, borderRadius: 4, marginTop: 8 }}>
+--host=&lt;host&gt;
+--port=&lt;port&gt;
+--key=9b27d71431466e0690e093c449ec5f803a7eb85a0c99de7ef448da8682d2b6c4
+              </pre>
+            </li>
+          </ol>
+          <div style={{ textAlign: 'right' }}>
+            <Button onClick={() => setSetupModalVisible(false)}>
+              Close
+            </Button>
+          </div>
+        </Modal>
 
         <Tabs 
           activeKey={activeTab} 
