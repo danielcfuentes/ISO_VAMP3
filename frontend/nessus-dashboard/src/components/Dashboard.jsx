@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Layout, Space, Tag, Typography, Card, message, Tooltip, Tabs, Input } from 'antd';
+import { Table, Button, Layout, Space, Tag, Typography, message, Tooltip, Tabs, Input, Collapse } from 'antd';
 import { PlayCircleOutlined, DownloadOutlined, DeleteOutlined, BugOutlined, StopOutlined, CopyOutlined } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
@@ -8,6 +8,7 @@ import InternalScanVulDetailsModal from './InternalScanVulDetailsModal';
 const { Title } = Typography;
 const { Header, Content } = Layout;
 const { TabPane } = Tabs;
+const { Panel } = Collapse;
 
 const Dashboard = () => {
   const [servers, setServers] = useState([]);
@@ -653,29 +654,34 @@ const Dashboard = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Content style={{ padding: '24px' }}>
-        <Card 
-          title="Nessus Agent Linking Key" 
+        <Collapse 
+          defaultActiveKey={['0']} 
           style={{ marginBottom: '24px' }}
-          extra={
-            <Button 
-              icon={<CopyOutlined />} 
-              onClick={handleCopyKey}
-              type={copySuccess ? 'primary' : 'default'}
-            >
-              {copySuccess ? 'Copied!' : 'Copy'}
-            </Button>
-          }
         >
-          <Input.TextArea
-            value={`/opt/nessus_agent/sbin/nessuscli agent link --groups="${username}" --key=9b27d71431466e0690e093c449ec5f803a7eb85a0c99de7ef448da8682d2b6c4 --host=isosrvutn00.utep.edu --port=8834`}
-            readOnly
-            autoSize={{ minRows: 2, maxRows: 4 }}
-            style={{ fontFamily: 'monospace' }}
-          />
-          <Typography.Text type="secondary" style={{ display: 'block', marginTop: '8px' }}>
-            Your username is automatically included in the linking key
-          </Typography.Text>
-        </Card>
+          <Panel 
+            header="Nessus Agent Linking Key" 
+            key="1"
+          >
+            <Input.TextArea
+              value={`/opt/nessus_agent/sbin/nessuscli agent link --groups="${username}" --key=9b27d71431466e0690e093c449ec5f803a7eb85a0c99de7ef448da8682d2b6c4 --host=isosrvutn00.utep.edu --port=8834`}
+              readOnly
+              autoSize={{ minRows: 2, maxRows: 4 }}
+              style={{ fontFamily: 'monospace' }}
+            />
+            <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography.Text type="secondary">
+                Your username is automatically included in the linking key
+              </Typography.Text>
+              <Button 
+                icon={<CopyOutlined />} 
+                onClick={handleCopyKey}
+                type={copySuccess ? 'primary' : 'default'}
+              >
+                {copySuccess ? 'Copied!' : 'Copy'}
+              </Button>
+            </div>
+          </Panel>
+        </Collapse>
 
         <Tabs 
           activeKey={activeTab} 
