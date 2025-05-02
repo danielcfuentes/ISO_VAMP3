@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Modal, Form, Input, Button, Select, Typography, Alert, Space, Radio, DatePicker, message, Spin } from 'antd';
-import { FileTextOutlined } from '@ant-design/icons';
+import { Modal, Form, Input, Button, Select, Typography, Alert, Space, Radio, DatePicker, message, Spin, Card, Table, Tag } from 'antd';
+import { FileTextOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
 const { TextArea } = Input;
@@ -28,7 +28,10 @@ const ExceptionRequestFormModal = ({
   const [customDuration, setCustomDuration] = useState(false);
   const [loading, setLoading] = useState(false);
   const [departmentHeadLoading, setDepartmentHeadLoading] = useState(false);
+  const [selectedVulnIds, setSelectedVulnIds] = useState([]);
+  const [isFormComplete, setIsFormComplete] = useState(false);
 
+  // Reset form when modal opens/closes
   useEffect(() => {
     if (visible) {
       form.resetFields();
@@ -36,6 +39,7 @@ const ExceptionRequestFormModal = ({
         serverName: serverName
       });
       setCustomDuration(false);
+      setSelectedVulnIds([]);
       fetchRequesterInfo();
     }
   }, [visible, serverName, form]);
@@ -121,6 +125,84 @@ const ExceptionRequestFormModal = ({
     }
   };
 
+  // Function to check if a vulnerability is complete
+  const isVulnerabilityComplete = (vulnId) => {
+    const formValues = form.getFieldsValue();
+    const justification = formValues[`justification_${vulnId}`];
+    const mitigation = formValues[`mitigation_${vulnId}`];
+    return justification?.trim()?.length >= 20 && mitigation?.trim()?.length >= 20;
+  };
+
+  // Function to check if all selected vulnerabilities are complete
+  const areAllSelectedVulnsComplete = () => {
+    return selectedVulnIds.every(vulnId => isVulnerabilityComplete(vulnId));
+  };
+
+  // Handle vulnerability selection change
+  const handleVulnerabilityChange = (selectedIds) => {
+    setSelectedVulnIds(selectedIds);
+    // Clear form fields for unselected vulnerabilities
+    const formValues = form.getFieldsValue();
+    Object.keys(formValues).forEach(key => {
+      if (key.startsWith('justification_') || key.startsWith('mitigation_')) {
+        const vulnId = key.split('_')[1];
+        if (!selectedIds.includes(vulnId)) {
+          form.setFieldsValue({ [key]: undefined });
+        }
+      }
+    });
+    handleFormValuesChange();
+  };
+
+  // Handle form values change
+  const handleFormValuesChange = () => {
+    const formValues = form.getFieldsValue();
+    const allRequiredFieldsFilled = 
+      formValues.requesterFirstName &&
+      formValues.requesterLastName &&
+      formValues.requesterJobDescription &&
+      formValues.requesterEmail &&
+      formValues.departmentHeadUsername &&
+      formValues.departmentHeadFirstName &&
+      formValues.departmentHeadLastName &&
+      formValues.departmentHeadJobDescription &&
+      formValues.departmentHeadEmail &&
+      formValues.dataClassification &&
+      formValues.exceptionDurationType &&
+      (!formValues.exceptionDurationType === 'custom' || formValues.customExpirationDate) &&
+      formValues.usersAffected &&
+      formValues.dataAtRisk &&
+      formValues.termsAccepted;
+
+    setIsFormComplete(areAllSelectedVulnsComplete() && allRequiredFieldsFilled);
+  };
+
+  // Table columns definition
+  const columns = [
+    {
+      title: 'Vulnerability',
+      dataIndex: 'name',
+      key: 'name',
+      render: (text) => <Typography.Text strong>{text}</Typography.Text>
+    },
+    {
+      title: 'Status',
+      key: 'status',
+      render: (_, record) => {
+        const isComplete = isVulnerabilityComplete(record.plugin_id);
+        const isSelected = selectedVulnIds.includes(record.plugin_id);
+        return (
+          <Tag 
+            color={isSelected ? (isComplete ? 'success' : 'error') : 'default'}
+            icon={isSelected ? (isComplete ? <CheckCircleOutlined /> : <CloseCircleOutlined />) : null}
+          >
+            {isSelected ? (isComplete ? 'Complete' : 'Incomplete') : 'Not Selected'}
+          </Tag>
+        );
+      }
+    }
+  ];
+
   // Handle form submission
   const handleSubmit = async (values) => {
     try {
@@ -128,7 +210,18 @@ const ExceptionRequestFormModal = ({
       
       // Get the selected vulnerability IDs from the form
       const selectedVulnIds = values.vulnerabilities || [];
-      console.log('Selected vulnerability IDs:', selectedVulnIds);
+      
+      // Validate that all selected vulnerabilities have justification and mitigation
+      const missingFields = selectedVulnIds.filter(vulnId => {
+        const justification = values[`justification_${vulnId}`];
+        const mitigation = values[`mitigation_${vulnId}`];
+        return !justification || !mitigation;
+      });
+
+      if (missingFields.length > 0) {
+        message.error('Please provide both justification and mitigation for all selected vulnerabilities');
+        return;
+      }
       
       // Filter the vulnerabilities array to only include selected ones
       const selectedVulnerabilities = vulnerabilities
@@ -137,10 +230,10 @@ const ExceptionRequestFormModal = ({
           id: vuln.plugin_id,
           name: vuln.plugin_name || vuln.name,
           severity: vuln.severity,
-          description: vuln.description
+          description: vuln.description,
+          justification: values[`justification_${vuln.plugin_id}`],
+          mitigation: values[`mitigation_${vuln.plugin_id}`]
         }));
-      
-      console.log('Selected vulnerabilities:', selectedVulnerabilities);
       
       // Determine exception type based on the presence of vulnerabilities
       const exceptionType = selectedVulnerabilities.length > 0 ? 'Vulnerability' : 'Standard';
@@ -157,8 +250,6 @@ const ExceptionRequestFormModal = ({
         exceptionType: exceptionType
       };
       
-      console.log('Submitting form data:', formData);
-      
       // Send the request to the backend
       const response = await axios.post(`${API_URL}/exception-requests`, formData, {
         withCredentials: true,
@@ -166,8 +257,6 @@ const ExceptionRequestFormModal = ({
           'Content-Type': 'application/json',
         }
       });
-      
-      console.log('Server response:', response.data);
       
       if (response.data.success) {
         message.success('Exception request submitted successfully');
@@ -225,7 +314,7 @@ const ExceptionRequestFormModal = ({
       <Spin spinning={loading || departmentHeadLoading}>
         <Alert
           message="Exception Request"
-          description="Use this form to request an exception for vulnerabilities that cannot be immediately remediated. All requests require proper justification and mitigation measures."
+          description="Use this form to request an exception for vulnerabilities that cannot be immediately remediated. All requests require proper justification and mitigation measures for each selected vulnerability."
           type="warning"
           showIcon
           style={{ marginBottom: 24 }}
@@ -236,6 +325,8 @@ const ExceptionRequestFormModal = ({
           layout="vertical"
           onFinish={handleSubmit}
           requiredMark="optional"
+          validateTrigger={['onChange', 'onBlur', 'onSubmit']}
+          onValuesChange={handleFormValuesChange}
         >
           {/* Server Information */}
           <Form.Item
@@ -440,46 +531,92 @@ const ExceptionRequestFormModal = ({
             <TextArea rows={4} />
           </Form.Item>
 
+          {/* Vulnerability Status Table */}
+          <Card style={{ marginBottom: 16 }}>
+            <Typography.Title level={5}>Vulnerability Completion Status</Typography.Title>
+            <Table
+              columns={columns}
+              dataSource={vulnerabilities.map(vuln => ({
+                ...vuln,
+                name: vuln.plugin_name || vuln.name
+              }))}
+              rowKey="plugin_id"
+              pagination={false}
+              size="small"
+            />
+          </Card>
+
           {/* Vulnerabilities Selection */}
           <Form.Item
             name="vulnerabilities"
             label="Vulnerabilities"
-            rules={[{ required: true, message: 'Please select at least one vulnerability' }]}
+            rules={[{ required: true, message: 'You must select all vulnerabilities to submit the form' }]}
           >
             <Select
               mode="multiple"
-              placeholder="Select vulnerabilities for exception"
+              placeholder="Select all vulnerabilities that need exception"
               style={{ width: '100%' }}
               options={vulnerabilities.map(vuln => ({
                 label: `${vuln.plugin_id}: ${vuln.plugin_name || vuln.name}`,
                 value: vuln.plugin_id
               }))}
+              onChange={handleVulnerabilityChange}
             />
           </Form.Item>
 
-          {/* Justification */}
-          <Form.Item
-            name="justification"
-            label="Please review and provide a reasonable justification and mitigation strategy for each vulnerability"
-            rules={[
-              { required: true, message: 'Please provide justification' },
-              { min: 20, message: 'Justification must be at least 20 characters' }
-            ]}
-          >
-            <TextArea rows={4} />
-          </Form.Item>
+          {/* Dynamic Justification and Mitigation boxes for each selected vulnerability */}
+          {selectedVulnIds.map(vulnId => {
+            const vuln = vulnerabilities.find(v => v.plugin_id === vulnId);
+            if (!vuln) return null;
+            
+            return (
+              <Card 
+                key={vulnId} 
+                title={`Vulnerability: ${vuln.plugin_name || vuln.name}`}
+                style={{ marginBottom: 16 }}
+                extra={
+                  <Tag 
+                    color={isVulnerabilityComplete(vulnId) ? 'success' : 'error'}
+                    icon={isVulnerabilityComplete(vulnId) ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                  >
+                    {isVulnerabilityComplete(vulnId) ? 'Complete' : 'Incomplete'}
+                  </Tag>
+                }
+              >
+                <Form.Item
+                  name={`justification_${vulnId}`}
+                  label="Justification"
+                  rules={[
+                    { required: true, message: 'Please provide justification for this vulnerability' },
+                    { min: 20, message: 'Justification must be at least 20 characters' }
+                  ]}
+                  validateTrigger={['onChange', 'onBlur']}
+                  dependencies={[`mitigation_${vulnId}`]}
+                >
+                  <TextArea 
+                    rows={4} 
+                    placeholder="Please provide a detailed justification for this vulnerability exception"
+                  />
+                </Form.Item>
 
-          {/* Mitigation */}
-          <Form.Item
-            name="mitigation"
-            label="Mitigation Strategy"
-            rules={[
-              { required: true, message: 'Please provide a mitigation strategy' },
-              { min: 20, message: 'Mitigation strategy must be at least 20 characters' }
-            ]}
-          >
-            <TextArea rows={4} />
-          </Form.Item>
+                <Form.Item
+                  name={`mitigation_${vulnId}`}
+                  label="Mitigation Strategy"
+                  rules={[
+                    { required: true, message: 'Please provide a mitigation strategy for this vulnerability' },
+                    { min: 20, message: 'Mitigation strategy must be at least 20 characters' }
+                  ]}
+                  validateTrigger={['onChange', 'onBlur']}
+                  dependencies={[`justification_${vulnId}`]}
+                >
+                  <TextArea 
+                    rows={4} 
+                    placeholder="Please describe how you plan to mitigate the risks associated with this vulnerability"
+                  />
+                </Form.Item>
+              </Card>
+            );
+          })}
 
           {/* Terms and Conditions */}
           <Title level={4}>Terms and Conditions</Title>
@@ -510,8 +647,16 @@ const ExceptionRequestFormModal = ({
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={submitting} block>
-              Submit Exception Request
+            <Button 
+              type="primary" 
+              htmlType="submit" 
+              loading={submitting} 
+              block
+              disabled={!isFormComplete}
+            >
+              {!isFormComplete 
+                ? 'Complete all vulnerability details and required fields to submit' 
+                : 'Submit Exception Request'}
             </Button>
           </Form.Item>
         </Form>
