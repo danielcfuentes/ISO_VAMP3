@@ -66,7 +66,7 @@ def send_security_notification(request_data):
             mail = outlook.CreateItem(0)
             logging.warning(f"Error accessing accounts: {str(e)}, using default account")
         
-        mail.To = "dcfuentes@miners.utep.edu"
+        mail.To = "security@utep.edu"
         mail.Subject = f"VAMP TESTING EMAIL: New Vulnerability Exception Request - {request_data.get('serverName')}"
         mail.HTMLBody = email_body
         mail.Send()
@@ -406,7 +406,7 @@ def send_status_update_email(request_id, status, comments):
         """
         
         # For testing, send to a test email address
-        mail.To = "dcfuentes@miners.utep.edu"
+        mail.To = "dcfuentes2@miners.utep.edu"
         mail.Subject = subject
         mail.HTMLBody = body
         mail.Send()

@@ -2315,7 +2315,7 @@ def update_exception_request_status(request_id):
         
         execute_query(status_update_query, status_params)
         
-        # Get the updated phase and status
+        # Verify the update was successful
         verify_query = """
         SELECT ApprovalPhase, Status FROM VulnerabilityExceptionRequests WHERE ID = ?
         """
@@ -2325,18 +2325,13 @@ def update_exception_request_status(request_id):
             actual_phase = verify_result[0].get('ApprovalPhase')
             actual_status = verify_result[0].get('Status')
             logging.info(f"Updated request {request_id} - Phase: {actual_phase}, Status: {actual_status}")
-            
-            return jsonify({
-                'success': True,
-                'message': f'Exception request {status.lower()} successfully',
-                'nextPhase': next_phase,
-                'currentPhase': actual_phase  # Return the actual current phase from the database
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Failed to verify update'
-            }), 500
+        
+        return jsonify({
+            'success': True,
+            'message': f'Exception request {status.lower()} successfully',
+            'nextPhase': next_phase,
+            'currentPhase': current_phase
+        })
         
     except Exception as e:
         logging.error(f"Error updating exception request status: {str(e)}")

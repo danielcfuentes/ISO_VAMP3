@@ -58,7 +58,7 @@
 
 /* Sidebar Styling */
 .utep-sidebar {
-  background-color: var(--utep-gray) !important;
+  background-color: #f5f5f5 !important;
   border-right: 1px solid #e8e8e8;
   padding: 1.5rem 0;
 }
@@ -168,17 +168,20 @@
 }
 
 .logout-button {
-  color: var(--utep-orange) !important;
+  background-color: var(--utep-navy) !important;
+  color: var(--utep-white) !important;
   font-weight: 500;
   height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 4px !important;
+  border: none !important;
 }
 
 .logout-button:hover {
-  color: #E66800 !important;
-  background-color: #fff3e0;
+  background-color: #0f2d5c !important;
+  color: var(--utep-white) !important;
 }
 
 .logout-button .anticon {
@@ -246,7 +249,7 @@
 }
 
 .ant-menu-dark {
-  background-color: #808080 !important;
+  background-color: #f5f5f5 !important;
 }
 
 .ant-menu-item {
@@ -264,7 +267,7 @@
 }
 
 .ant-layout-sider {
-  background-color: #808080 !important;
+  background-color: #f5f5f5 !important;
 }
 
 .ant-tabs-tab.ant-tabs-tab-active {

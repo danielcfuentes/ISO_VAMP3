@@ -57,20 +57,14 @@ const AdminDashboard = () => {
       
       if (response.data.success) {
         const requestsArray = response.data.requests || [];
-        // Process each request to ensure phase and status fields are set
-        const processedRequests = requestsArray.map(request => {
-          const currentPhase = request.approvalPhase || determinePhase(request);
-          return {
-            ...request,
-            approvalPhase: currentPhase,
-            // Set the overall status based on the phase and individual statuses
-            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
-                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
-                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
-                   'PENDING'
-          };
-        });
-        setExceptionRequests(processedRequests);
+        setExceptionRequests(requestsArray.map(request => ({
+          ...request,
+          // Keep the stored approvalPhase, don't recalculate it
+          status: request.approvalPhase === 'COMPLETED' ? 'APPROVED' : 
+                 request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+                 request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+                 'PENDING'
+        })));
       } else {
         message.error(response.data.message || 'Failed to load exception requests');
         setExceptionRequests([]);
@@ -85,6 +79,7 @@ const AdminDashboard = () => {
   };
 
   // Helper function to determine the phase based on request status
+  // eslint-disable-next-line no-unused-vars
   const determinePhase = (request) => {
     if (!request) return 'ISO_REVIEW';
     
@@ -117,14 +112,6 @@ const AdminDashboard = () => {
     return 'ISO_REVIEW';
   };
 
-  // Helper function to determine the status based on request and phase
-  const determineStatus = (request, phase) => {
-    if (phase === 'COMPLETED') return 'APPROVED';
-    if (request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED') return 'DECLINED';
-    if (request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO') return 'NEED_MORE_INFO';
-    return 'PENDING';
-  };
-
   const handleViewDetails = (request) => {
     setSelectedRequest(request);
     setModalVisible(true);
@@ -134,22 +121,37 @@ const AdminDashboard = () => {
     setShowMoreInfoForm(false);
   };
 
+  const refreshExceptionRequests = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/admin/exception-requests?t=${Date.now()}`, {
+        withCredentials: true
+      });
+      
+      if (response.data.success) {
+        const requestsArray = response.data.requests || [];
+        setExceptionRequests(requestsArray.map(request => ({
+          ...request,
+          // Keep the stored approvalPhase, don't recalculate it
+          status: request.approvalPhase === 'COMPLETED' ? 'APPROVED' : 
+                 request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+                 request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+                 'PENDING'
+        })));
+      } else {
+        message.error(response.data.message || 'Failed to refresh exception requests');
+      }
+    } catch (error) {
+      console.error('Error refreshing requests:', error);
+      message.error('Failed to refresh requests');
+    }
+  };
+
   const handleApprove = async (request) => {
     try {
       setUpdating(true);
-      const currentPhase = request.approvalPhase || determinePhase(request);
+      const currentPhase = request.approvalPhase;
       console.log('Current phase before approval:', currentPhase);
       console.log('Request data:', request);
-      
-      // First verify the request exists
-      try {
-        await axios.get(`${API_URL}/exception-requests/${request.id}`, { withCredentials: true });
-      } catch (error) {
-        if (error.response?.status === 404) {
-          message.error('Request not found. Please refresh the page.');
-          return;
-        }
-      }
       
       const response = await axios.put(
         `${API_URL}/exception-requests/${request.id}/update-status`,
@@ -168,12 +170,26 @@ const AdminDashboard = () => {
       );
       
       if (response.data.success) {
-        message.success('Request approved successfully');
         console.log('Response from approval:', response.data);
         
-        // Refresh the data
-        await refreshExceptionRequests();
+        // Immediately update the local state with the new phase
+        setExceptionRequests(prevRequests => 
+          prevRequests.map(req => 
+            req.id === request.id
+              ? {
+                  ...req,
+                  approvalPhase: response.data.nextPhase,
+                  status: 'APPROVED'
+                }
+              : req
+          )
+        );
+
+        message.success('Request approved successfully');
         setModalVisible(false);
+        
+        // Then refresh all data from server
+        await refreshExceptionRequests();
       } else {
         throw new Error(response.data.message || 'Failed to approve request');
       }
@@ -193,32 +209,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Add a refresh function that can be called after any state changes
-  const refreshExceptionRequests = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/admin/exception-requests`, {
-        withCredentials: true
-      });
-      
-      if (response.data.success) {
-        const requestsArray = response.data.requests || [];
-        const processedRequests = requestsArray.map(request => {
-          const currentPhase = request.approvalPhase || determinePhase(request);
-          return {
-            ...request,
-            approvalPhase: currentPhase,
-            status: determineStatus(request, currentPhase)
-          };
-        });
-        
-        setExceptionRequests(processedRequests);
-      }
-    } catch (error) {
-      console.error('Error refreshing requests:', error);
-      message.error('Failed to refresh requests');
-    }
-  };
-
   // Add effect to refresh data periodically or when modal closes
   useEffect(() => {
     if (!modalVisible) {
@@ -228,7 +218,7 @@ const AdminDashboard = () => {
 
   // Add effect to refresh data periodically
   useEffect(() => {
-    const refreshInterval = setInterval(refreshExceptionRequests, 30000); // Refresh every 30 seconds
+    const refreshInterval = setInterval(refreshExceptionRequests, 60000); // Refresh every 60 seconds
     return () => clearInterval(refreshInterval);
   }, []);
 
