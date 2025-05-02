@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Table, Tag, Space, Button, Card, message, Spin, Alert, Modal, List } from 'antd';
-import { DownOutlined, UpOutlined, BugOutlined } from '@ant-design/icons';
+import { DownOutlined, UpOutlined } from '@ant-design/icons';
 import nessusService from '../services/nessusService';
 
 const ScanHistoryTab = ({ serverName, isExternal }) => {
@@ -88,11 +88,7 @@ const ScanHistoryTab = ({ serverName, isExternal }) => {
         name: v.plugin_name || 'Unknown',
         plugin_id: v.plugin_id || 'Unknown',
         description: v.description || 'No description available',
-        solution: v.solution || 'No solution available',
-        cvss_score: v.cvss_score || 'N/A',
-        cvss_vector: v.cvss_vector || 'N/A',
-        risk_factor: v.severity_name || 'N/A',
-        count: v.count || 1
+        solution: v.solution || 'No solution available'
       }));
     
     setSelectedVulns(filteredVulns);
@@ -122,22 +118,10 @@ const ScanHistoryTab = ({ serverName, isExternal }) => {
                     <strong>Plugin ID:</strong> {vuln.plugin_id}
                   </div>
                   <div>
-                    <strong>Count:</strong> {vuln.count}
-                  </div>
-                  <div>
                     <strong>Description:</strong> {vuln.description}
                   </div>
                   <div>
                     <strong>Solution:</strong> {vuln.solution}
-                  </div>
-                  <div>
-                    <strong>CVSS Score:</strong> {vuln.cvss_score}
-                  </div>
-                  <div>
-                    <strong>CVSS Vector:</strong> {vuln.cvss_vector}
-                  </div>
-                  <div>
-                    <strong>Risk Factor:</strong> {vuln.risk_factor}
                   </div>
                 </Card>
               </List.Item>
@@ -157,9 +141,9 @@ const ScanHistoryTab = ({ serverName, isExternal }) => {
 
   const columns = [
     {
-      title: 'Scan Name',
-      dataIndex: 'scan_name',
-      key: 'scan_name',
+      title: 'Scan ID',
+      dataIndex: 'history_id',
+      key: 'history_id',
       render: (text) => <span>{text}</span>,
     },
     {
@@ -185,13 +169,33 @@ const ScanHistoryTab = ({ serverName, isExternal }) => {
       title: 'Start Time',
       dataIndex: 'starttime',
       key: 'starttime',
-      render: (text) => <span>{text || 'N/A'}</span>,
+      render: (text) => {
+        if (!text) return 'N/A';
+        try {
+          const date = new Date(text);
+          if (isNaN(date.getTime())) return 'Invalid Date';
+          return date.toLocaleString();
+        } catch (error) {
+          console.error('Error formatting date:', error);
+          return 'Invalid Date';
+        }
+      },
     },
     {
       title: 'End Time',
       dataIndex: 'endtime',
       key: 'endtime',
-      render: (text) => <span>{text || 'N/A'}</span>,
+      render: (text) => {
+        if (!text) return 'N/A';
+        try {
+          const date = new Date(text);
+          if (isNaN(date.getTime())) return 'Invalid Date';
+          return date.toLocaleString();
+        } catch (error) {
+          console.error('Error formatting date:', error);
+          return 'Invalid Date';
+        }
+      },
     },
     {
       title: 'Action',
@@ -213,13 +217,6 @@ const ScanHistoryTab = ({ serverName, isExternal }) => {
     return (
       <Card size="small" title="Scan Details">
         <Space direction="vertical" style={{ width: '100%' }}>
-          <div>
-            <strong>Scan Type:</strong> {record.scan_type || 'N/A'}
-          </div>
-          <div>
-            <strong>UUID:</strong> {record.uuid || 'N/A'}
-          </div>
-          
           {isLoading ? (
             <div className="flex justify-center p-4">
               <Spin />
