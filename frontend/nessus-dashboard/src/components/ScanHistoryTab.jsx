@@ -75,25 +75,51 @@ const ScanHistoryTab = ({ serverName, isExternal }) => {
     }
   };
 
-  const handleVulnClick = (host, severity) => {
-    // Get the vulnerabilities for this host from the scan data
-    const scanVulns = vulnerabilities[expandedRows[0]]?.hosts?.find(h => 
-      (h.hostname === host.hostname || h.ip === host.ip)
-    )?.vulnerabilities || [];
+  const handleVulnClick = async (host, severity) => {
+    try {
+      // Get the vulnerabilities for this host from the scan data
+      const vulnData = vulnerabilities[expandedRows[0]];
+      const scanId = vulnData?.id; // Correct scan id from vulnerabilities data
+      const scanVulns = vulnData?.hosts?.find(h => 
+        (h.hostname === host.hostname || h.ip === host.ip)
+      )?.vulnerabilities || [];
 
-    // Filter vulnerabilities by severity_name and ensure we have the required fields
-    const filteredVulns = scanVulns
-      .filter(v => v.severity_name?.toLowerCase() === severity)
-      .map(v => ({
-        name: v.plugin_name || 'Unknown',
-        plugin_id: v.plugin_id || 'Unknown',
-        description: v.description || 'No description available',
-        solution: v.solution || 'No solution available'
-      }));
-    
-    setSelectedVulns(filteredVulns);
-    setSelectedSeverity(severity);
-    setVulnModalVisible(true);
+      // Filter vulnerabilities by severity_name
+      const filteredVulns = scanVulns.filter(v => v.severity_name?.toLowerCase() === severity);
+      
+      // Fetch detailed information for each vulnerability
+      const detailedVulns = await Promise.all(
+        filteredVulns.map(async (vuln) => {
+          try {
+            const details = isExternal
+              ? await nessusService.getVulnerabilityPluginDetails(scanId, host.id, vuln.plugin_id)
+              : await nessusService.getInternalVulnerabilityPluginDetails(scanId, host.id, vuln.plugin_id);
+            
+            return {
+              name: vuln.plugin_name || 'Unknown',
+              plugin_id: vuln.plugin_id || 'Unknown',
+              synopsis: details?.synopsis || 'No synopsis available',
+              solution: details?.solution || 'No solution available'
+            };
+          } catch (error) {
+            console.error('Error fetching vulnerability details:', error);
+            return {
+              name: vuln.plugin_name || 'Unknown',
+              plugin_id: vuln.plugin_id || 'Unknown',
+              synopsis: 'Failed to fetch synopsis',
+              solution: 'Failed to fetch solution'
+            };
+          }
+        })
+      );
+      
+      setSelectedVulns(detailedVulns);
+      setSelectedSeverity(severity);
+      setVulnModalVisible(true);
+    } catch (error) {
+      console.error('Error handling vulnerability click:', error);
+      message.error('Failed to fetch vulnerability details');
+    }
   };
 
   const renderVulnerabilityModal = () => {
@@ -118,7 +144,7 @@ const ScanHistoryTab = ({ serverName, isExternal }) => {
                     <strong>Plugin ID:</strong> {vuln.plugin_id}
                   </div>
                   <div>
-                    <strong>Description:</strong> {vuln.description}
+                    <strong>Synopsis:</strong> {vuln.synopsis}
                   </div>
                   <div>
                     <strong>Solution:</strong> {vuln.solution}
