@@ -547,14 +547,7 @@ const ExceptionRequests = () => {
           Exception requests allow you to document vulnerabilities that cannot be immediately remediated. 
           Each request requires justification and appropriate mitigation measures.
         </Paragraph>
-        
-        <Alert
-          message="About Exception Requests"
-          description="If a vulnerability cannot be remediated due to business or technical constraints, you can request an exception. All exceptions must be thoroughly justified, include appropriate compensating controls, and are subject to security team approval."
-          type="info"
-          showIcon
-          className="mb-4"
-        />
+      
         
         <Space direction="vertical" style={{ width: '100%' }}>
           <Row gutter={[16, 16]}>
