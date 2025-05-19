@@ -1663,13 +1663,7 @@ def get_external_scan_history(server_name):
 @login_required
 def create_exception_request():
     try:
-        if not request.is_json:
-            return jsonify({
-                'success': False,
-                'message': 'Request must be JSON'
-            }), 400
-
-        data = request.get_json()
+        data = request.json
         if not data:
             return jsonify({
                 'success': False,
@@ -1684,30 +1678,28 @@ def create_exception_request():
                 'message': 'User not authenticated'
             }), 401
 
-        # Validate required fields
+        # Check required fields
         required_fields = [
-            'serverName', 'requesterFirstName', 'requesterLastName',
-            'requesterJobDescription', 'requesterEmail',
-            'departmentHeadUsername', 'departmentHeadFirstName',
-            'departmentHeadLastName', 'departmentHeadJobDescription',
-            'departmentHeadEmail', 'dataClassification',
-            'exceptionDurationType', 'usersAffected', 'dataAtRisk',
-            'justification', 'mitigation', 'termsAccepted'
+            'requesterFirstName', 'requesterLastName', 'requesterJobDescription',
+            'requesterEmail', 'departmentHeadUsername', 'departmentHeadFirstName',
+            'departmentHeadLastName', 'departmentHeadJobDescription', 'departmentHeadEmail',
+            'dataClassification', 'exceptionDurationType', 'usersAffected',
+            'dataAtRisk', 'justification', 'mitigation', 'termsAccepted'
         ]
-
+        
         missing_fields = [field for field in required_fields if not data.get(field)]
         if missing_fields:
             return jsonify({
                 'success': False,
                 'message': f'Missing required fields: {", ".join(missing_fields)}'
             }), 400
-        
-        # Get optional fields, allowing NULL values
-        requester_department = data.get('requesterDepartment')
-        requester_phone = data.get('requesterPhone')
-        department_head_department = data.get('departmentHeadDepartment')
-        department_head_phone = data.get('departmentHeadPhone')
-        
+
+        # Get requester department and phone
+        requester_department = data.get('requesterDepartment', '')
+        requester_phone = data.get('requesterPhone', '')
+        department_head_department = data.get('departmentHeadDepartment', '')
+        department_head_phone = data.get('departmentHeadPhone', '')
+
         # Calculate expiration date based on duration type
         duration_type = data.get('exceptionDurationType')
         if duration_type == 'custom':
@@ -1726,12 +1718,19 @@ def create_exception_request():
                     'success': False,
                     'message': 'Invalid duration type'
                 }), 400
-        
+
         # Convert vulnerabilities array to JSON string
         vulnerabilities_json = json.dumps(data.get('vulnerabilities', []))
         
         # Get exception type from the request data
-        exception_type = data.get('exceptionType', 'Standard')
+        exception_type = data.get('requestType', 'Standard')
+        
+        # Check if this is a multi-server request
+        server_details = data.get('serverDetails', [])
+        has_multiple_servers = len(server_details) > 1
+
+        # For single server requests, use the first server as the primary
+        primary_server = server_details[0]['serverName'] if server_details else data.get('serverName')
         
         # Prepare the insert query
         query = """
@@ -1744,12 +1743,12 @@ def create_exception_request():
             ExceptionDurationType, ExpirationDate, UsersAffected, DataAtRisk,
             Vulnerabilities, Justification, Mitigation, TermsAccepted,
             Status, DeclineReason, RequestedBy, RequestedDate, CreatedAt, UpdatedAt,
-            ExceptionType
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, GETDATE(), GETDATE(), GETDATE(), ?)
+            ExceptionType, HasMultipleServers
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, GETDATE(), GETDATE(), GETDATE(), ?, ?)
         """
         
         params = (
-            data.get('serverName'),
+            primary_server,
             data.get('requesterFirstName'),
             data.get('requesterLastName'),
             requester_department,
@@ -1773,8 +1772,9 @@ def create_exception_request():
             data.get('mitigation'),
             data.get('termsAccepted'),
             'Pending',
-            username,  # Use username from session instead of email
-            exception_type
+            username,
+            exception_type,
+            has_multiple_servers
         )
         
         try:
@@ -1798,12 +1798,30 @@ def create_exception_request():
                     'success': False,
                     'message': 'Error creating exception request'
                 }), 500
+
+            # If this is a multi-server request, insert the additional servers
+            if has_multiple_servers and len(server_details) > 1:
+                server_insert_query = """
+                INSERT INTO ExceptionRequestServers (RequestID, ServerName, Justification, Mitigation)
+                VALUES (?, ?, ?, ?)
+                """
+                
+                for server in server_details[1:]:  # Skip the first server as it's already in the main table
+                    server_params = (
+                        request_id,
+                        server['serverName'],
+                        server.get('justification', ''),
+                        server.get('mitigation', '')
+                    )
+                    execute_query(server_insert_query, server_params)
             
             # Prepare request data for email
             request_data = {
                 'id': request_id,
-                'requestID': request_number,  # Add the RequestID
-                'serverName': data.get('serverName'),
+                'requestID': request_number,
+                'serverName': primary_server,
+                'hasMultipleServers': has_multiple_servers,
+                'serverCount': len(server_details) if server_details else 1,
                 'requesterFirstName': data.get('requesterFirstName'),
                 'requesterLastName': data.get('requesterLastName'),
                 'requesterEmail': data.get('requesterEmail'),
@@ -1818,49 +1836,27 @@ def create_exception_request():
             
             # Send confirmation email to the requester
             requester_email = data.get('requesterEmail')
-            server_name = data.get('serverName')
-            if requester_email:
-                email_thread = threading.Thread(
-                    target=send_confirmation_email,
-                    args=(requester_email, server_name)
-                )
-                email_thread.start()
-            
-            # Send notification email to security team
-            security_thread = threading.Thread(
-                target=send_security_notification,
-                args=(request_data,)
-            )
-            security_thread.start()
+            send_exception_request_confirmation(requester_email, request_data)
             
             return jsonify({
                 'success': True,
-                'message': 'Exception request submitted successfully'
+                'message': 'Exception request created successfully',
+                'requestID': request_number,
+                'id': request_id
             }), 201
             
-        except pyodbc.Error as e:
-            error_message = str(e)
-            if 'connection' in error_message.lower():
-                return jsonify({
-                    'success': False,
-                    'message': 'Database connection error. Please try again later.'
-                }), 500
-            elif 'timeout' in error_message.lower():
-                return jsonify({
-                    'success': False,
-                    'message': 'Database operation timed out. Please try again.'
-                }), 500
-            else:
-                return jsonify({
-                    'success': False,
-                    'message': f'Database error: {error_message}'
-                }), 500
-                
+        except Exception as e:
+            logging.error(f"Error creating exception request: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Error creating exception request: {str(e)}'
+            }), 500
+            
     except Exception as e:
-        logging.error(f"Error submitting exception request: {str(e)}")
+        logging.error(f"Error in create_exception_request: {str(e)}")
         return jsonify({
             'success': False,
-            'message': f'Error submitting exception request: {str(e)}'
+            'message': str(e)
         }), 500
 
 @app.route('/api/exception-requests', methods=['GET'])

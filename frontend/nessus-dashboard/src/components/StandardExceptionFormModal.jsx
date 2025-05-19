@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Modal, Form, Input, Button, Typography, Alert, Space, Radio, DatePicker, message, Spin, Collapse } from 'antd';
-import { FileTextOutlined, MinusCircleOutlined, PlusOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { Modal, Form, Input, Button, Typography, Space, Radio, DatePicker, message, Spin, Collapse } from 'antd';
+import { FileTextOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import moment from 'moment';
 
@@ -284,16 +284,35 @@ const StandardExceptionFormModal = ({
         justification: values.serverJustifications?.[index] || '',
         mitigation: values.serverMitigations?.[index] || ''
       })).filter(server => server.serverName?.trim());
+
+      // Format the combined justification and mitigation
+      const combinedJustification = serverDetails.map(server => 
+        `Server: ${server.serverName}\nJustification: ${server.justification}`
+      ).join('\n\n');
+
+      const combinedMitigation = serverDetails.map(server => 
+        `Server: ${server.serverName}\nMitigation: ${server.mitigation}`
+      ).join('\n\n');
+
+      // For standard exceptions, we'll use the first server as the primary server
+      // and include the rest in the justification/mitigation
+      const primaryServer = serverDetails[0]?.serverName || '';
       
       const formData = {
         ...values,
+        serverName: primaryServer, // Use first server as primary
+        justification: combinedJustification,
+        mitigation: combinedMitigation,
         expirationDate: expirationDate,
         requestType: 'standard',
-        serverDetails, // Include the server-specific details
-        // Remove the individual arrays as they're now combined in serverDetails
+        // Remove the individual arrays as they're now combined
         serverNames: undefined,
         serverJustifications: undefined,
-        serverMitigations: undefined
+        serverMitigations: undefined,
+        // Add additional info if provided
+        additionalInfo: values.additionalInfo ? 
+          `Additional Information:\n${values.additionalInfo}\n\n${combinedJustification}` : 
+          combinedJustification
       };
       
       if (onSubmit) {
@@ -303,6 +322,8 @@ const StandardExceptionFormModal = ({
           ...formData,
           expirationDate: expirationDate.toISOString()
         };
+        
+        console.log('Submitting exception request with data:', apiData);
         
         const response = await axios.post(`${API_URL}/exception-requests`, apiData, {
           withCredentials: true
