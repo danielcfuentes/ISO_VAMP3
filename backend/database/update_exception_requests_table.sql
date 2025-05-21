@@ -167,4 +167,4 @@ BEGIN
     ALTER TABLE VulnerabilityExceptionRequests
     ALTER COLUMN RequestID VARCHAR(20) NOT NULL;
 END
-GO 
+GO
