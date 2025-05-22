@@ -1,5 +1,6 @@
 // src/services/nessusService.js
 import axios from 'axios';
+import { message } from 'antd';
 
 const API_URL = 'http://localhost:5000/api';
 
@@ -7,6 +8,31 @@ const API_URL = 'http://localhost:5000/api';
 // Configure axios defaults
 axios.defaults.withCredentials = true;
 axios.defaults.headers.common['Content-Type'] = 'application/json';
+
+// Create a custom event for authentication state changes
+const authEvent = new Event('authStateChange');
+
+// Add response interceptor to handle 401 responses
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Clear authentication state
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('isAdmin');
+      
+      // Dispatch auth state change event
+      window.dispatchEvent(authEvent);
+      
+      // Show message to user
+      message.error('Your session has expired. Please log in again.');
+      
+      // Redirect to login page
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 class NessusService {
   async login(username, password) {
@@ -671,6 +697,24 @@ class NessusService {
       console.error('Error fetching external scan history:', error);
       throw new Error(error.response?.data?.error || 'Failed to fetch external scan history');
     }
+  }
+
+  // Add method to check authentication status
+  async checkAuthStatus() {
+    try {
+      const response = await axios.get(`${API_URL}/auth/current-user`, {
+        withCredentials: true
+      });
+      return response.data.success;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Add method to handle authentication state changes
+  onAuthStateChange(callback) {
+    window.addEventListener('authStateChange', callback);
+    return () => window.removeEventListener('authStateChange', callback);
   }
 }
 
