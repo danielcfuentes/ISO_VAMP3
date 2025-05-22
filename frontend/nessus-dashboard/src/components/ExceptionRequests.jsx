@@ -87,11 +87,13 @@ const ExceptionRequests = () => {
           return {
             ...request,
             approvalPhase: currentPhase,
-            // Set the overall status based on the phase and individual statuses
-            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
-                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
-                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
-                   'PENDING'
+            // Use backend Status as source of truth, fallback to derived logic
+            status: request.status || (
+              currentPhase === 'COMPLETED' ? 'APPROVED' : 
+              request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+              request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+              'PENDING'
+            )
           };
         });
         console.log('Setting requests to:', processedRequests);
@@ -190,10 +192,13 @@ const ExceptionRequests = () => {
           return {
             ...request,
             approvalPhase: currentPhase,
-            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
-                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
-                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
-                   'PENDING'
+            // Use backend Status as source of truth, fallback to derived logic
+            status: request.status || (
+              currentPhase === 'COMPLETED' ? 'APPROVED' : 
+              request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+              request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+              'PENDING'
+            )
           };
         });
         
@@ -314,17 +319,24 @@ const ExceptionRequests = () => {
     });
   };
 
+  const phaseLabels = {
+    ISO_REVIEW: 'ISO Review',
+    DEPARTMENT_HEAD_REVIEW: 'Department Head Review',
+    CISO_REVIEW: 'CISO Review',
+    COMPLETED: 'Completed',
+  };
+
   const getPhaseTag = (phase) => {
     const phaseColors = {
-      'ISO_REVIEW': 'blue',
-      'DEPARTMENT_HEAD_REVIEW': 'purple',
-      'CISO_REVIEW': 'orange',
-      'COMPLETED': 'green'
+      ISO_REVIEW: 'blue',
+      DEPARTMENT_HEAD_REVIEW: 'purple',
+      CISO_REVIEW: 'orange',
+      COMPLETED: 'green',
     };
-    
+    const label = phaseLabels[phase] || phaseLabels['ISO_REVIEW'];
     return (
       <Tag color={phaseColors[phase] || 'default'}>
-        {phase?.replace('_', ' ') || 'Unknown'}
+        {label}
       </Tag>
     );
   };

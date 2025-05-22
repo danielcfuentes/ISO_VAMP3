@@ -30,6 +30,13 @@ const AdminDashboard = () => {
   const [typeFilter, setTypeFilter] = useState('all');
   const [phaseFilter, setPhaseFilter] = useState('all');
 
+  const phaseLabels = {
+    ISO_REVIEW: 'ISO Review',
+    DEPARTMENT_HEAD_REVIEW: 'Department Head Review',
+    CISO_REVIEW: 'CISO Review',
+    COMPLETED: 'Completed',
+  };
+
   useEffect(() => {
     fetchExceptionRequests();
     fetchUserRoles();
@@ -59,11 +66,13 @@ const AdminDashboard = () => {
         const requestsArray = response.data.requests || [];
         setExceptionRequests(requestsArray.map(request => ({
           ...request,
-          // Keep the stored approvalPhase, don't recalculate it
-          status: request.approvalPhase === 'COMPLETED' ? 'APPROVED' : 
-                 request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
-                 request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
-                 'PENDING'
+          // Use backend Status as source of truth, fallback to derived logic
+          status: request.status || (
+            request.approvalPhase === 'COMPLETED' ? 'APPROVED' : 
+            request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+            request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+            'PENDING'
+          )
         })));
       } else {
         message.error(response.data.message || 'Failed to load exception requests');
@@ -131,11 +140,13 @@ const AdminDashboard = () => {
         const requestsArray = response.data.requests || [];
         setExceptionRequests(requestsArray.map(request => ({
           ...request,
-          // Keep the stored approvalPhase, don't recalculate it
-          status: request.approvalPhase === 'COMPLETED' ? 'APPROVED' : 
-                 request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
-                 request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
-                 'PENDING'
+          // Use backend Status as source of truth, fallback to derived logic
+          status: request.status || (
+            request.approvalPhase === 'COMPLETED' ? 'APPROVED' : 
+            request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+            request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+            'PENDING'
+          )
         })));
       } else {
         message.error(response.data.message || 'Failed to refresh exception requests');
@@ -149,7 +160,7 @@ const AdminDashboard = () => {
   const handleApprove = async (request) => {
     try {
       setUpdating(true);
-      const currentPhase = request.approvalPhase;
+      const currentPhase = request.approvalPhase || determinePhase(request);
       console.log('Current phase before approval:', currentPhase);
       console.log('Request data:', request);
       
@@ -188,8 +199,10 @@ const AdminDashboard = () => {
         message.success('Request approved successfully');
         setModalVisible(false);
         
-        // Then refresh all data from server
-        await refreshExceptionRequests();
+        // Add a short delay before refreshing from backend
+        setTimeout(() => {
+          refreshExceptionRequests();
+        }, 500);
       } else {
         throw new Error(response.data.message || 'Failed to approve request');
       }
@@ -235,14 +248,31 @@ const AdminDashboard = () => {
 
     try {
       setUpdating(true);
+      const currentPhase = request.approvalPhase || determinePhase(request);
       await axios.put(
         `${API_URL}/exception-requests/${request.id}/update-status`,
-        { status: 'DECLINED', comments: declineReason },
+        { status: 'DECLINED', comments: declineReason, approvalPhase: currentPhase },
         { withCredentials: true }
+      );
+      // Update local state immediately
+      setExceptionRequests(prevRequests =>
+        prevRequests.map(req =>
+          req.id === request.id
+            ? {
+                ...req,
+                status: 'DECLINED',
+                approvalPhase: currentPhase,
+                isoStatus: 'DECLINED'
+              }
+            : req
+        )
       );
       message.success('Exception request declined');
       setModalVisible(false);
-      fetchExceptionRequests();
+      // Add a short delay before refreshing from backend
+      setTimeout(() => {
+        fetchExceptionRequests();
+      }, 500);
     } catch (error) {
       console.error('Error declining request:', error);
       message.error('Failed to decline request');
@@ -264,14 +294,31 @@ const AdminDashboard = () => {
 
     try {
       setUpdating(true);
+      const currentPhase = request.approvalPhase || determinePhase(request);
       await axios.put(
         `${API_URL}/exception-requests/${request.id}/update-status`,
-        { status: 'NEED_MORE_INFO', comments: moreInfoReason },
+        { status: 'NEED_MORE_INFO', comments: moreInfoReason, approvalPhase: currentPhase },
         { withCredentials: true }
+      );
+      // Update local state immediately
+      setExceptionRequests(prevRequests =>
+        prevRequests.map(req =>
+          req.id === request.id
+            ? {
+                ...req,
+                status: 'NEED_MORE_INFO',
+                approvalPhase: currentPhase,
+                isoStatus: 'NEED_MORE_INFO'
+              }
+            : req
+        )
       );
       message.success('Request for more information sent');
       setModalVisible(false);
-      fetchExceptionRequests();
+      // Add a short delay before refreshing from backend
+      setTimeout(() => {
+        fetchExceptionRequests();
+      }, 500);
     } catch (error) {
       console.error('Error requesting more information:', error);
       message.error('Failed to send request for more information');
@@ -306,15 +353,15 @@ const AdminDashboard = () => {
 
   const getPhaseTag = (phase) => {
     const phaseColors = {
-      'ISO_REVIEW': 'blue',
-      'DEPARTMENT_HEAD_REVIEW': 'purple',
-      'CISO_REVIEW': 'orange',
-      'COMPLETED': 'green'
+      ISO_REVIEW: 'blue',
+      DEPARTMENT_HEAD_REVIEW: 'purple',
+      CISO_REVIEW: 'orange',
+      COMPLETED: 'green',
     };
-    
+    const label = phaseLabels[phase] || phaseLabels['ISO_REVIEW'];
     return (
       <Tag color={phaseColors[phase] || 'default'}>
-        {phase?.replace('_', ' ') || 'Unknown'}
+        {label}
       </Tag>
     );
   };
@@ -472,8 +519,8 @@ const AdminDashboard = () => {
   ];
 
   const renderActionButtons = (request) => {
-    // Only show action buttons if the request is in the current phase and not already approved/declined
-    const canTakeAction = request.status !== 'APPROVED' && request.status !== 'DECLINED';
+    // Show action buttons if isoStatus is missing (null/undefined) or 'PENDING'
+    const canTakeAction = !request.isoStatus || request.isoStatus === 'PENDING';
     
     return (
       <div style={{ marginTop: 16, textAlign: 'right' }}>

@@ -22,6 +22,13 @@ const DepartmentHeadDashboard = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
 
+  const phaseLabels = {
+    ISO_REVIEW: 'ISO Review',
+    DEPARTMENT_HEAD_REVIEW: 'Department Head Review',
+    CISO_REVIEW: 'CISO Review',
+    COMPLETED: 'Completed',
+  };
+
   useEffect(() => {
     fetchExceptionRequests();
   }, []);
@@ -61,7 +68,7 @@ const DepartmentHeadDashboard = () => {
           return {
             ...request,
             approvalPhase: currentPhase,
-            status: determineStatus(request, currentPhase)
+            status: request.status || determineStatus(request, currentPhase)
           };
         });
         
@@ -287,15 +294,15 @@ const DepartmentHeadDashboard = () => {
 
   const getPhaseTag = (phase) => {
     const phaseColors = {
-      'ISO_REVIEW': 'blue',
-      'DEPARTMENT_HEAD_REVIEW': 'purple',
-      'CISO_REVIEW': 'orange',
-      'COMPLETED': 'green'
+      ISO_REVIEW: 'blue',
+      DEPARTMENT_HEAD_REVIEW: 'purple',
+      CISO_REVIEW: 'orange',
+      COMPLETED: 'green',
     };
-    
+    const label = phaseLabels[phase] || phaseLabels['ISO_REVIEW'];
     return (
       <Tag color={phaseColors[phase] || 'default'}>
-        {phase?.replace('_', ' ') || 'Unknown'}
+        {label}
       </Tag>
     );
   };
@@ -639,7 +646,7 @@ const DepartmentHeadDashboard = () => {
           return {
             ...request,
             approvalPhase: currentPhase,
-            status: determineStatus(request, currentPhase)
+            status: request.status || determineStatus(request, currentPhase)
           };
         });
         
