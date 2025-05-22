@@ -24,7 +24,7 @@ const ServerEntryFields = ({ field, remove, isFirst }) => {
     <div style={{ border: '1px solid #d9d9d9', borderRadius: '4px', padding: '16px', marginBottom: '16px' }}>
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
         <Form.Item
-          {...field}
+          name={[field.name, 'serverName']}
           label="Server Name/IP"
           validateTrigger={['onChange', 'onBlur']}
           rules={[
@@ -297,7 +297,15 @@ const StandardExceptionFormModal = ({
         serverEntries: undefined, // Remove the server entries array
         additionalInfo: values.additionalInfo ? 
           `Additional Information:\n${values.additionalInfo}\n\n${combinedJustification}` : 
-          combinedJustification
+          combinedJustification,
+        // Map approver fields to departmentHead fields for backend compatibility
+        departmentHeadUsername: values.approverUsername,
+        departmentHeadFirstName: values.approverFirstName,
+        departmentHeadLastName: values.approverLastName,
+        departmentHeadDepartment: values.approverDepartment,
+        departmentHeadJobDescription: values.approverJobDescription,
+        departmentHeadEmail: values.approverEmail,
+        departmentHeadPhone: values.approverPhone
       };
       
       if (onSubmit) {
@@ -600,6 +608,31 @@ const StandardExceptionFormModal = ({
                   />
                 </Form.Item>
               )}
+
+              {/* Users Affected */}
+              <Form.Item
+                name="usersAffected"
+                label="Users Affected"
+                rules={[{ required: true, message: 'Please select number of users affected' }]}
+              >
+                <Radio.Group>
+                  <Space direction="vertical">
+                    <Radio value="1-100">1-100</Radio>
+                    <Radio value="101-1000">101-1,000</Radio>
+                    <Radio value="1001-10000">1,001-10,000</Radio>
+                    <Radio value="10000+">Greater than 10,000</Radio>
+                  </Space>
+                </Radio.Group>
+              </Form.Item>
+
+              {/* Data/Departments at Risk */}
+              <Form.Item
+                name="dataAtRisk"
+                label="Data, departments, or customers that may be placed at risk"
+                rules={[{ required: true, message: 'Please describe data/departments at risk' }]}
+              >
+                <TextArea rows={3} />
+              </Form.Item>
             </Panel>
           </Collapse>
 
