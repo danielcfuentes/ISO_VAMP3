@@ -8,7 +8,6 @@ import {
   Modal, 
   message, 
   Tag, 
-  Alert,
   Input,
   Form,
   Row,
@@ -88,11 +87,13 @@ const ExceptionRequests = () => {
           return {
             ...request,
             approvalPhase: currentPhase,
-            // Set the overall status based on the phase and individual statuses
-            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
-                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
-                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
-                   'PENDING'
+            // Use backend Status as source of truth, fallback to derived logic
+            status: request.status || (
+              currentPhase === 'COMPLETED' ? 'APPROVED' : 
+              request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+              request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+              'PENDING'
+            )
           };
         });
         console.log('Setting requests to:', processedRequests);
@@ -155,7 +156,7 @@ const ExceptionRequests = () => {
       // Format the data and submit
       const formattedData = {
         ...values,
-        requestType: 'standard',
+        formType: 'standard',
         status: 'pending',
         requestedDate: new Date().toISOString()
       };
@@ -191,10 +192,13 @@ const ExceptionRequests = () => {
           return {
             ...request,
             approvalPhase: currentPhase,
-            status: currentPhase === 'COMPLETED' ? 'APPROVED' : 
-                   request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
-                   request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
-                   'PENDING'
+            // Use backend Status as source of truth, fallback to derived logic
+            status: request.status || (
+              currentPhase === 'COMPLETED' ? 'APPROVED' : 
+              request.cisoStatus === 'DECLINED' || request.deptHeadStatus === 'DECLINED' || request.isoStatus === 'DECLINED' ? 'DECLINED' :
+              request.cisoStatus === 'NEED_MORE_INFO' || request.deptHeadStatus === 'NEED_MORE_INFO' || request.isoStatus === 'NEED_MORE_INFO' ? 'NEED_MORE_INFO' :
+              'PENDING'
+            )
           };
         });
         
@@ -315,17 +319,24 @@ const ExceptionRequests = () => {
     });
   };
 
+  const phaseLabels = {
+    ISO_REVIEW: 'ISO Review',
+    DEPARTMENT_HEAD_REVIEW: 'Department Head Review',
+    CISO_REVIEW: 'CISO Review',
+    COMPLETED: 'Completed',
+  };
+
   const getPhaseTag = (phase) => {
     const phaseColors = {
-      'ISO_REVIEW': 'blue',
-      'DEPARTMENT_HEAD_REVIEW': 'purple',
-      'CISO_REVIEW': 'orange',
-      'COMPLETED': 'green'
+      ISO_REVIEW: 'blue',
+      DEPARTMENT_HEAD_REVIEW: 'purple',
+      CISO_REVIEW: 'orange',
+      COMPLETED: 'green',
     };
-    
+    const label = phaseLabels[phase] || phaseLabels['ISO_REVIEW'];
     return (
       <Tag color={phaseColors[phase] || 'default'}>
-        {phase?.replace('_', ' ') || 'Unknown'}
+        {label}
       </Tag>
     );
   };
@@ -341,6 +352,12 @@ const ExceptionRequests = () => {
       default:
         return <ClockCircleOutlined />;
     }
+  };
+
+  const getExceptionTypeTag = (type) => {
+    const color = type && type.toLowerCase() === 'vulnerability' ? 'orange' : 'blue';
+    const label = type ? type.charAt(0).toUpperCase() + type.slice(1).toLowerCase() : '';
+    return <Tag color={color}>{label}</Tag>;
   };
 
   const renderApprovalHistory = (request) => {
@@ -439,6 +456,63 @@ const ExceptionRequests = () => {
     );
   };
 
+  // Helper to parse justification/mitigation into table data
+  const parseServerDetails = (text, type = 'justification') => {
+    if (!text) return [];
+    // Split by double newlines (\n\n) or by 'Server:'
+    const items = text.split(/\n\n|(?=Server: )/).filter(Boolean);
+    return items.map(item => {
+      const serverMatch = item.match(/Server: ([^\n]+)/);
+      // Split on the first occurrence of 'Justification:' or 'Mitigation:'
+      const splitKey = `${type.charAt(0).toUpperCase() + type.slice(1)}:`;
+      let value = '';
+      if (item.includes(splitKey)) {
+        value = item.split(splitKey)[1]?.trim() || '';
+      } else {
+        value = item.replace(/Server: [^\n]+/, '').trim();
+      }
+      return {
+        server: serverMatch ? serverMatch[1].trim() : '',
+        value
+      };
+    });
+  };
+
+  // Helper to parse vulnerability details for justification/mitigation
+  const parseVulnerabilityDetails = (text, vulnerabilities) => {
+    if (!text || !Array.isArray(vulnerabilities) || vulnerabilities.length === 0) return [];
+    const lines = text.split('\n').map(line => line.trim());
+    return vulnerabilities
+      .map(vuln => {
+        // Support both string and object with name property
+        const vulnName = typeof vuln === 'string' ? vuln : vuln?.name;
+        if (!vulnName) return null;
+        const normalizedVuln = (vulnName + ':').toLowerCase().replace(/\s+/g, ' ').trim();
+        let lineIdx = -1;
+        for (let i = 0; i < lines.length; i++) {
+          const normalizedLine = lines[i].toLowerCase().replace(/\s+/g, ' ').trim();
+          if (normalizedLine.startsWith(normalizedVuln)) {
+            lineIdx = i;
+            break;
+          }
+        }
+        let value = '';
+        if (lineIdx !== -1) {
+          for (let i = lineIdx + 1; i < lines.length; i++) {
+            if (lines[i]) {
+              value = lines[i];
+              break;
+            }
+          }
+        }
+        return {
+          vulnerability: vulnName,
+          value
+        };
+      })
+      .filter(Boolean);
+  };
+
   const columns = [
     {
       title: 'Request ID',
@@ -456,11 +530,7 @@ const ExceptionRequests = () => {
       title: 'Exception Type',
       dataIndex: 'exceptionType',
       key: 'exceptionType',
-      render: (type) => (
-        <Tag color={type === 'Vulnerability' ? 'orange' : 'blue'}>
-          {type}
-        </Tag>
-      )
+      render: (type) => getExceptionTypeTag(type)
     },
     {
       title: 'Status',
@@ -547,14 +617,7 @@ const ExceptionRequests = () => {
           Exception requests allow you to document vulnerabilities that cannot be immediately remediated. 
           Each request requires justification and appropriate mitigation measures.
         </Paragraph>
-        
-        <Alert
-          message="About Exception Requests"
-          description="If a vulnerability cannot be remediated due to business or technical constraints, you can request an exception. All exceptions must be thoroughly justified, include appropriate compensating controls, and are subject to security team approval."
-          type="info"
-          showIcon
-          className="mb-4"
-        />
+      
         
         <Space direction="vertical" style={{ width: '100%' }}>
           <Row gutter={[16, 16]}>
@@ -670,12 +733,110 @@ const ExceptionRequests = () => {
             
             <div className="mb-4">
               <Text strong>Justification:</Text>
-              <div>{selectedRequest.justification}</div>
+              {(() => {
+                if (selectedRequest.exceptionType && selectedRequest.exceptionType.toLowerCase() === 'vulnerability') {
+                  // Parse by vulnerabilities
+                  let vulnerabilities = [];
+                  if (typeof selectedRequest.vulnerabilities === 'string') {
+                    try {
+                      vulnerabilities = JSON.parse(selectedRequest.vulnerabilities);
+                    } catch {
+                      vulnerabilities = [];
+                    }
+                  } else {
+                    vulnerabilities = selectedRequest.vulnerabilities || [];
+                  }
+                  const justificationRows = parseVulnerabilityDetails(selectedRequest.justification, vulnerabilities);
+                  console.log('Justification Table Rows:', justificationRows);
+                  // Remove the rows as JSON for debugging
+                  return (
+                    <Table
+                      dataSource={justificationRows}
+                      columns={[
+                        { title: 'Vulnerability', dataIndex: 'vulnerability', key: 'vulnerability' },
+                        { title: 'Justification', dataIndex: 'value', key: 'justification' }
+                      ]}
+                      pagination={false}
+                      size="small"
+                      rowKey={(row, idx) => row.vulnerability + idx}
+                    />
+                  );
+                } else {
+                  // Standard exception (server-based)
+                  const justificationRows = parseServerDetails(selectedRequest.justification, 'justification');
+                  if (justificationRows.length > 0 && justificationRows.some(row => row.server)) {
+                    return (
+                      <Table
+                        dataSource={justificationRows}
+                        columns={[
+                          { title: 'Server', dataIndex: 'server', key: 'server' },
+                          { title: 'Justification', dataIndex: 'value', key: 'justification' }
+                        ]}
+                        pagination={false}
+                        size="small"
+                        rowKey={(row, idx) => row.server + idx}
+                      />
+                    );
+                  } else {
+                    return <div>{selectedRequest.justification}</div>;
+                  }
+                }
+              })()}
             </div>
             
             <div>
               <Text strong>Mitigation Measures:</Text>
-              <div>{selectedRequest.mitigation}</div>
+              {(() => {
+                if (selectedRequest.exceptionType && selectedRequest.exceptionType.toLowerCase() === 'vulnerability') {
+                  // Parse by vulnerabilities
+                  let vulnerabilities = [];
+                  if (typeof selectedRequest.vulnerabilities === 'string') {
+                    try {
+                      vulnerabilities = JSON.parse(selectedRequest.vulnerabilities);
+                    } catch {
+                      vulnerabilities = [];
+                    }
+                  } else {
+                    vulnerabilities = selectedRequest.vulnerabilities || [];
+                  }
+                  const mitigationRows = parseVulnerabilityDetails(selectedRequest.mitigation, vulnerabilities);
+                  if (mitigationRows.length > 0 && mitigationRows.some(row => row.vulnerability)) {
+                    return (
+                      <Table
+                        dataSource={mitigationRows}
+                        columns={[
+                          { title: 'Vulnerability', dataIndex: 'vulnerability', key: 'vulnerability' },
+                          { title: 'Mitigation', dataIndex: 'value', key: 'mitigation' }
+                        ]}
+                        pagination={false}
+                        size="small"
+                        rowKey={(row, idx) => row.vulnerability + idx}
+                      />
+                    );
+                  } else {
+                    return <div>{selectedRequest.mitigation}</div>;
+                  }
+                } else {
+                  // Standard exception (server-based)
+                  const mitigationRows = parseServerDetails(selectedRequest.mitigation, 'mitigation');
+                  if (mitigationRows.length > 0 && mitigationRows.some(row => row.server)) {
+                    return (
+                      <Table
+                        dataSource={mitigationRows}
+                        columns={[
+                          { title: 'Server', dataIndex: 'server', key: 'server' },
+                          { title: 'Mitigation', dataIndex: 'value', key: 'mitigation' }
+                        ]}
+                        pagination={false}
+                        size="small"
+                        rowKey={(row, idx) => row.server + idx}
+                      />
+                    );
+                  } else {
+                    return <div>{selectedRequest.mitigation}</div>;
+                  }
+                }
+              })()}
             </div>
             
             {renderApprovalHistory(selectedRequest)}

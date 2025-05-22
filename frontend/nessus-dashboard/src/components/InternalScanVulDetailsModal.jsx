@@ -566,25 +566,68 @@ const InternalScanVulDetailsModal = ({
               typeof v === 'string' ? v : (v.name || v.plugin_name || `Vulnerability ID: ${v.id || v.plugin_id}`)
             );
             
+            // Combine individual justifications and mitigations into single fields
+            const combinedJustification = values.vulnerabilities.map(v => {
+              const vulnName = typeof v === 'string' ? v : (v.name || v.plugin_name);
+              const justification = values[`justification_${v.id || v.plugin_id}`];
+              return `${vulnName}:\n${justification}`;
+            }).join('\n\n');
+
+            const combinedMitigation = values.vulnerabilities.map(v => {
+              const vulnName = typeof v === 'string' ? v : (v.name || v.plugin_name);
+              const mitigation = values[`mitigation_${v.id || v.plugin_id}`];
+              return `${vulnName}:\n${mitigation}`;
+            }).join('\n\n');
+            
             // Format the data for the backend
             const formData = {
               serverName: values.serverName,
+              requesterFirstName: values.requesterFirstName,
+              requesterLastName: values.requesterLastName,
+              requesterJobDescription: values.requesterJobDescription,
+              requesterEmail: values.requesterEmail,
+              requesterDepartment: values.requesterDepartment,
+              requesterPhone: values.requesterPhone,
+              departmentHeadUsername: values.departmentHeadUsername,
+              departmentHeadFirstName: values.departmentHeadFirstName,
+              departmentHeadLastName: values.departmentHeadLastName,
+              departmentHeadJobDescription: values.departmentHeadJobDescription,
+              departmentHeadEmail: values.departmentHeadEmail,
+              departmentHeadDepartment: values.departmentHeadDepartment,
+              departmentHeadPhone: values.departmentHeadPhone,
+              dataClassification: values.dataClassification,
+              exceptionDurationType: values.exceptionDurationType,
+              usersAffected: values.usersAffected,
+              dataAtRisk: values.dataAtRisk,
               vulnerabilities: vulnerabilityNames,
-              justification: values.justification,
-              mitigation: values.mitigation,
-              expirationDate: values.expirationDate.format('YYYY-MM-DD')
+              justification: combinedJustification,
+              mitigation: combinedMitigation,
+              termsAccepted: values.termsAccepted,
+              expirationDate: values.expirationDate.format('YYYY-MM-DD'),
+              formType: 'vulnerability'
             };
             
+            // Log the data being sent
+            console.log('Submitting exception request with data:', formData);
+            
             // Submit the exception request
-            await axios.post(`${API_URL}/exception-requests`, formData, {
+            const response = await axios.post(`${API_URL}/exception-requests`, formData, {
               withCredentials: true
             });
+            
+            console.log('Server response:', response.data);
             
             message.success(`Exception request submitted for ${scan?.name}`);
             setExceptionModalVisible(false);
           } catch (error) {
             console.error('Error submitting exception request:', error);
-            message.error('Failed to submit exception request');
+            // Log the full error details
+            if (error.response) {
+              console.error('Error response data:', error.response.data);
+              console.error('Error response status:', error.response.status);
+              console.error('Error response headers:', error.response.headers);
+            }
+            message.error(error.response?.data?.message || 'Failed to submit exception request. Please check the console for details.');
           }
         }}
       />

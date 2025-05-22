@@ -290,13 +290,7 @@ const ExternalScans = () => {
           These scans help identify vulnerabilities that could be exploited by external threats.
         </Paragraph>
         
-        <Alert
-          message="Important Notice"
-          description="External vulnerability scanning must be performed in accordance with security policies. Unauthorized scanning is prohibited and may result in account suspension."
-          type="warning"
-          showIcon
-          className="mb-4"
-        />
+
         
         <Table
           columns={columns}

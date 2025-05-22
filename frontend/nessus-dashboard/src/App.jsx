@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { ConfigProvider } from 'antd';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './components/MainLayout';
@@ -20,10 +21,33 @@ function App() {
   const [userRoles, setUserRoles] = useState(null);
 
   useEffect(() => {
+    // Check authentication status on mount
+    checkAuthStatus();
+
+    // Subscribe to auth state changes
+    const unsubscribe = nessusService.onAuthStateChange(() => {
+      setIsAuthenticated(false);
+      setIsAdmin(false);
+      setUserRoles(null);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const checkAuthStatus = async () => {
     if (isAuthenticated) {
-      fetchUserRoles();
+      const isStillAuthenticated = await nessusService.checkAuthStatus();
+      if (!isStillAuthenticated) {
+        setIsAuthenticated(false);
+        setIsAdmin(false);
+        setUserRoles(null);
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('isAdmin');
+      } else {
+        fetchUserRoles();
+      }
     }
-  }, [isAuthenticated]);
+  };
 
   const fetchUserRoles = async () => {
     try {
@@ -66,7 +90,20 @@ function App() {
     if (requiresAdmin && !isAdmin) {
       return <Navigate to="/my-agents" replace />;
     }
-    return <MainLayout isAdmin={isAdmin} isDepartmentHead={true} onLogout={handleLogout}>{children}</MainLayout>;
+    return (
+      <MainLayout 
+        isAdmin={isAdmin} 
+        isDepartmentHead={userRoles?.isDepartmentHead} 
+        onLogout={handleLogout}
+      >
+        {children}
+      </MainLayout>
+    );
+  };
+
+  ProtectedRoute.propTypes = {
+    children: PropTypes.node.isRequired,
+    requiresAdmin: PropTypes.bool
   };
 
   return (

@@ -27,15 +27,6 @@
             text-align: center;
             color: #666;
         }
-        .button {
-            display: inline-block;
-            background-color: #FF7300;
-            color: white;
-            text-decoration: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            margin-top: 15px;
-        }
         .info-box {
             background-color: #e1f5fe;
             border-left: 4px solid #03a9f4;
@@ -48,13 +39,6 @@
             padding: 15px;
             margin: 15px 0;
             border-radius: 4px;
-        }
-        .request-details h3 {
-            margin-top: 0;
-            color: #041E42;
-        }
-        .request-details p {
-            margin: 5px 0;
         }
         .label {
             font-weight: bold;
@@ -69,30 +53,18 @@
     </div>
     
     <div class="content">
-        <h2>New Exception Request Notification</h2>
-        
         <div class="info-box">
-            <p><strong>A new vulnerability exception request has been submitted and requires your review.</strong></p>
+            <p><strong>New vulnerability exception request requires your review.</strong></p>
         </div>
         
         <div class="request-details">
-            <h3>Request Details</h3>
             <p><span class="label">Request ID:</span> {{ request_id }}</p>
-            <p><span class="label">Server Name:</span> {{ server_name }}</p>
-            <p><span class="label">Requester:</span> {{ requester_first_name }} {{ requester_last_name }}</p>
-            <p><span class="label">Requester Email:</span> {{ requester_email }}</p>
-            <p><span class="label">Department:</span> {{ requester_department }}</p>
-            <p><span class="label">Job Description:</span> {{ requester_job_description }}</p>
-            <p><span class="label">Data Classification:</span> {{ data_classification }}</p>
-            <p><span class="label">Exception Duration:</span> {{ exception_duration }}</p>
-            <p><span class="label">Expiration Date:</span> {{ expiration_date }}</p>
-            <p><span class="label">Users Affected:</span> {{ users_affected }}</p>
-            <p><span class="label">Data at Risk:</span> {{ data_at_risk }}</p>
+            <p><span class="label">Current Status:</span> {{ approval_phase }}</p>
         </div>
         
-        <p>Please review this request in the VaMP portal and take appropriate action.</p>
-        
-        <p><a href="{{ dashboard_url }}" class="button">Review Request</a></p>
+        <p>For more information, please contact the Information Security Office:</p>
+        <p>Email: security@utep.edu<br>
+        Phone: (915) 747-6324</p>
     </div>
     
     <div class="footer">

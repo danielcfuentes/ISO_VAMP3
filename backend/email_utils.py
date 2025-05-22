@@ -28,18 +28,7 @@ def send_security_notification(request_data):
         # Render the email body with the template
         email_body = template.render(
             request_id=request_data.get('requestID'),
-            server_name=request_data.get('serverName'),
-            requester_first_name=request_data.get('requesterFirstName'),
-            requester_last_name=request_data.get('requesterLastName'),
-            requester_email=request_data.get('requesterEmail'),
-            requester_department=request_data.get('requesterDepartment', 'N/A'),
-            requester_job_description=request_data.get('requesterJobDescription'),
-            data_classification=request_data.get('dataClassification'),
-            exception_duration=request_data.get('exceptionDurationType'),
-            expiration_date=request_data.get('expirationDate'),
-            users_affected=request_data.get('usersAffected'),
-            data_at_risk=request_data.get('dataAtRisk'),
-            dashboard_url="http://localhost:5173/exception-requests"  # Update with your actual URL
+            approval_phase=request_data.get('approvalPhase', 'ISO_REVIEW')
         )
         
         # Create and send the email using Outlook
@@ -66,8 +55,9 @@ def send_security_notification(request_data):
             mail = outlook.CreateItem(0)
             logging.warning(f"Error accessing accounts: {str(e)}, using default account")
         
-        mail.To = "security@utep.edu"
-        mail.Subject = f"VAMP TESTING EMAIL: New Vulnerability Exception Request - {request_data.get('serverName')}"
+        # For testing, send to test email
+        mail.To = "dcfuentes@miners.utep.edu"
+        mail.Subject = f"VAMP TESTING EMAIL: New Exception Request {request_data.get('requestID')} - {request_data.get('approvalPhase', 'ISO_REVIEW')}"
         mail.HTMLBody = email_body
         mail.Send()
         
@@ -131,19 +121,20 @@ def send_confirmation_email(recipient_email, server_name):
             mail = outlook.CreateItem(0)
             logging.warning(f"Error accessing accounts: {str(e)}, using default account")
         
-        mail.To = recipient_email
-        mail.Subject = f"Vulnerability Exception Request Submitted - {server_name}"
+        # For testing, send to test email
+        mail.To = "dcfuentes@miners.utep.edu"
+        mail.Subject = f"VAMP TESTING EMAIL: Vulnerability Exception Request Submitted - {server_name}"
         mail.HTMLBody = email_body
         mail.Send()
         
         # Clean up COM resources
         pythoncom.CoUninitialize()
         
-        logging.info(f"Confirmation email sent to {recipient_email} for server {server_name}")
+        logging.info(f"Confirmation email sent to dcfuentes@miners.utep.edu for server {server_name}")
         return True
         
     except Exception as e:
-        logging.error(f"Failed to send confirmation email to {recipient_email}: {str(e)}")
+        logging.error(f"Failed to send confirmation email: {str(e)}")
         return False
 
 def send_need_more_info_email(request_data, reviewer_name, reviewer_role, comments):
@@ -203,15 +194,16 @@ def send_need_more_info_email(request_data, reviewer_name, reviewer_role, commen
             mail = outlook.CreateItem(0)
             logging.warning(f"Error accessing accounts: {str(e)}, using default account")
         
-        mail.To = request_data.get('requesterEmail')
-        mail.Subject = f"Additional Information Required - Request {request_data.get('requestID')}"
+        # For testing, send to test email
+        mail.To = "dcfuentes@miners.utep.edu"
+        mail.Subject = f"VAMP TESTING EMAIL: Additional Information Required - Request {request_data.get('requestID')}"
         mail.HTMLBody = email_body
         mail.Send()
         
         # Clean up COM resources
         pythoncom.CoUninitialize()
         
-        logging.info(f"Need more info email sent to {request_data.get('requesterEmail')} for request {request_data.get('requestID')}")
+        logging.info(f"Need more info email sent to dcfuentes@miners.utep.edu for request {request_data.get('requestID')}")
         return True
         
     except Exception as e:
@@ -275,15 +267,16 @@ def send_decline_email(request_data, reviewer_name, reviewer_role, decline_reaso
             mail = outlook.CreateItem(0)
             logging.warning(f"Error accessing accounts: {str(e)}, using default account")
         
-        mail.To = request_data.get('requesterEmail')
-        mail.Subject = f"Request Declined - {request_data.get('requestID')}"
+        # For testing, send to test email
+        mail.To = "dcfuentes@miners.utep.edu"
+        mail.Subject = f"VAMP TESTING EMAIL: Request Declined - {request_data.get('requestID')}"
         mail.HTMLBody = email_body
         mail.Send()
         
         # Clean up COM resources
         pythoncom.CoUninitialize()
         
-        logging.info(f"Decline email sent to {request_data.get('requesterEmail')} for request {request_data.get('requestID')}")
+        logging.info(f"Decline email sent to dcfuentes@miners.utep.edu for request {request_data.get('requestID')}")
         return True
         
     except Exception as e:
@@ -347,15 +340,16 @@ def send_approval_email(request_data, approver_name, approver_role):
             mail = outlook.CreateItem(0)
             logging.warning(f"Error accessing accounts: {str(e)}, using default account")
         
-        mail.To = request_data.get('requesterEmail')
-        mail.Subject = f"Request Approved - {request_data.get('requestID')}"
+        # For testing, send to test email
+        mail.To = "dcfuentes@miners.utep.edu"
+        mail.Subject = f"VAMP TESTING EMAIL: Request Approved - {request_data.get('requestID')}"
         mail.HTMLBody = email_body
         mail.Send()
         
         # Clean up COM resources
         pythoncom.CoUninitialize()
         
-        logging.info(f"Approval email sent to {request_data.get('requesterEmail')} for request {request_data.get('requestID')}")
+        logging.info(f"Approval email sent to dcfuentes@miners.utep.edu for request {request_data.get('requestID')}")
         return True
         
     except Exception as e:
@@ -382,39 +376,46 @@ def send_status_update_email(request_id, status, comments):
         outlook = win32com.client.Dispatch("Outlook.Application")
         mail = outlook.CreateItem(0)
         
-        # Set email subject based on status
-        subject_prefix = "VAMP TESTING EMAIL: "
-        if status == 'APPROVED':
-            subject = f"{subject_prefix}Exception Request Approved - Request #{request_id}"
-        elif status == 'DECLINED':
-            subject = f"{subject_prefix}Exception Request Declined - Request #{request_id}"
-        else:  # NEED_MORE_INFO
-            subject = f"{subject_prefix}Additional Information Needed - Request #{request_id}"
-        
-        # Create email body
+        # Create simplified email body
         body = f"""
-        <p>Your vulnerability exception request (ID: {request_id}) has been reviewed.</p>
-        <p><strong>Status:</strong> {status}</p>
-        """
-        
-        if comments:
-            body += f"<p><strong>Comments:</strong> {comments}</p>"
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #041E42; padding: 20px; color: white; text-align: center;">
+                <h1>UTEP Information Security Office</h1>
+                <h2>Vulnerability Management Program (VaMP)</h2>
+            </div>
             
-        body += """
-        <p>You can view the full details of your request in the VaMP portal:</p>
-        <p><a href="http://localhost:5173/exception-requests">View Request</a></p>
+            <div style="padding: 20px; background-color: #f5f5f5;">
+                <div style="background-color: #e1f5fe; border-left: 4px solid #03a9f4; padding: 15px; margin: 15px 0;">
+                    <p><strong>Exception Request Status Update</strong></p>
+                </div>
+                
+                <div style="background-color: #fff; border: 1px solid #ddd; padding: 15px; margin: 15px 0; border-radius: 4px;">
+                    <p><strong>Request ID:</strong> {request_id}</p>
+                    <p><strong>Current Status:</strong> {status}</p>
+                </div>
+                
+                <p>For more information, please contact the Information Security Office:</p>
+                <p>Email: security@utep.edu<br>
+                Phone: (915) 747-6324</p>
+            </div>
+            
+            <div style="padding: 10px 20px; font-size: 12px; text-align: center; color: #666;">
+                <p>&copy; 2024 UTEP Information Security Office • All rights reserved</p>
+                <p>This email was sent automatically. Please do not reply to this message.</p>
+            </div>
+        </div>
         """
         
-        # For testing, send to a test email address
-        mail.To = "dcfuentes2@miners.utep.edu"
-        mail.Subject = subject
+        # For testing, send to test email
+        mail.To = "dcfuentes@miners.utep.edu"
+        mail.Subject = f"VAMP TESTING EMAIL: Request {request_id} Status Update - {status}"
         mail.HTMLBody = body
         mail.Send()
         
         # Clean up COM resources
         pythoncom.CoUninitialize()
         
-        logging.info(f"Status update email sent for request {request_id}")
+        logging.info(f"Status update email sent to dcfuentes@miners.utep.edu for request {request_id}")
         return True
         
     except Exception as e:

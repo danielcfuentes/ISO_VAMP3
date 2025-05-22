@@ -534,7 +534,8 @@ const VulDetailsModal = ({
               vulnerabilities: values.vulnerabilities, 
               justification: values.justification,
               mitigation: values.mitigation,
-              expirationDate: expirationDate
+              expirationDate: expirationDate,
+              formType: 'Vulnerability'
             };
             
             console.log("Submitting exception request:", formData);
