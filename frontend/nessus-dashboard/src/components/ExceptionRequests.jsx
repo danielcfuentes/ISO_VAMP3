@@ -155,7 +155,7 @@ const ExceptionRequests = () => {
       // Format the data and submit
       const formattedData = {
         ...values,
-        requestType: 'standard',
+        formType: 'standard',
         status: 'pending',
         requestedDate: new Date().toISOString()
       };

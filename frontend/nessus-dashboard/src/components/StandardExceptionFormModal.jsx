@@ -19,15 +19,13 @@ const TERMS_AND_CONDITIONS = [
   'This service is governed by all University policies, State, and Federal Laws. Failure to comply can result in disciplinary action and fines as defined by Legal Regulations.'
 ];
 
-// Add this new component for server entry fields
 const ServerEntryFields = ({ field, remove, isFirst }) => {
-  const [serverName, setServerName] = useState('');
-  
   return (
     <div style={{ border: '1px solid #d9d9d9', borderRadius: '4px', padding: '16px', marginBottom: '16px' }}>
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
         <Form.Item
           {...field}
+          label="Server Name/IP"
           validateTrigger={['onChange', 'onBlur']}
           rules={[
             {
@@ -36,13 +34,8 @@ const ServerEntryFields = ({ field, remove, isFirst }) => {
               message: "Please enter server name/IP or remove this field"
             }
           ]}
-          noStyle
         >
-          <Input 
-            placeholder="Enter server name or IP address" 
-            style={{ width: '100%' }}
-            onChange={(e) => setServerName(e.target.value)}
-          />
+          <Input placeholder="Enter server name or IP address" />
         </Form.Item>
         {!isFirst && (
           <MinusCircleOutlined
@@ -52,43 +45,40 @@ const ServerEntryFields = ({ field, remove, isFirst }) => {
           />
         )}
       </div>
-      
-      {serverName && (
-        <>
-          <Form.Item
-            name={['serverJustifications', field.name]}
-            label="Justification for this server"
-            rules={[
-              { required: true, message: 'Please provide justification for this server' },
-              { min: 20, message: 'Justification must be at least 20 characters' }
-            ]}
-          >
-            <TextArea 
-              rows={3} 
-              placeholder={`Please provide justification for ${serverName} (min 20 characters)`}
-            />
-          </Form.Item>
 
-          <Form.Item
-            name={['serverMitigations', field.name]}
-            label="Mitigation for this server"
-            rules={[
-              { required: true, message: 'Please provide mitigation for this server' },
-              { min: 20, message: 'Mitigation must be at least 20 characters' }
-            ]}
-          >
-            <TextArea 
-              rows={3} 
-              placeholder={`Please describe how you will mitigate risks for ${serverName} (min 20 characters)`}
-            />
-          </Form.Item>
-        </>
-      )}
+      <Form.Item
+        name={[field.name, 'justification']}
+        label="Justification for this server"
+        rules={[
+          { required: true, message: 'Please provide justification for this server' },
+          { min: 20, message: 'Justification must be at least 20 characters' }
+        ]}
+        validateTrigger={['onChange', 'onBlur']}
+      >
+        <TextArea 
+          rows={3} 
+          placeholder="Please provide justification (min 20 characters)"
+        />
+      </Form.Item>
+
+      <Form.Item
+        name={[field.name, 'mitigation']}
+        label="Mitigation for this server"
+        rules={[
+          { required: true, message: 'Please provide mitigation for this server' },
+          { min: 20, message: 'Mitigation must be at least 20 characters' }
+        ]}
+        validateTrigger={['onChange', 'onBlur']}
+      >
+        <TextArea 
+          rows={3} 
+          placeholder="Please describe how you will mitigate risks (min 20 characters)"
+        />
+      </Form.Item>
     </div>
   );
 };
 
-// Add PropTypes validation for ServerEntryFields
 ServerEntryFields.propTypes = {
   field: PropTypes.shape({
     key: PropTypes.string.isRequired,
@@ -207,6 +197,8 @@ const StandardExceptionFormModal = ({
 
   const checkFormCompleteness = () => {
     const formValues = form.getFieldsValue();
+    console.log('Current form values:', formValues);
+    
     const requiredFields = [
       'requesterFirstName',
       'requesterLastName',
@@ -218,47 +210,43 @@ const StandardExceptionFormModal = ({
       'approverJobDescription',
       'approverEmail',
       'standardInfo',
-      'serverNames',
+      'serverEntries',
       'dataClassification',
       'exceptionDurationType',
       'termsAccepted'
     ];
     
     const missingRequiredFields = requiredFields.some(field => {
-      if (field === 'serverNames') {
-        return !formValues[field]?.some(name => name?.trim());
+      if (field === 'serverEntries') {
+        const hasValidServer = formValues[field]?.some(entry => 
+          entry?.serverName?.trim() && 
+          entry?.justification?.length >= 20 && 
+          entry?.mitigation?.length >= 20
+        );
+        console.log('Server entries check:', { serverEntries: formValues[field], hasValidServer });
+        return !hasValidServer;
       }
-      return !formValues[field];
+      const isMissing = !formValues[field];
+      if (isMissing) {
+        console.log('Missing required field:', field);
+      }
+      return isMissing;
     });
     
     if (missingRequiredFields) {
-      setEnableSubmit(false);
-      return;
-    }
-    
-    // Check if all servers have justification and mitigation
-    const serverNames = formValues.serverNames || [];
-    const serverJustifications = formValues.serverJustifications || {};
-    const serverMitigations = formValues.serverMitigations || {};
-    
-    const allServersComplete = serverNames.every((serverName, index) => {
-      if (!serverName?.trim()) return true; // Skip empty server names
-      const justification = serverJustifications[index];
-      const mitigation = serverMitigations[index];
-      return justification?.length >= 20 && mitigation?.length >= 20;
-    });
-    
-    if (!allServersComplete) {
+      console.log('Form incomplete: Missing required fields');
       setEnableSubmit(false);
       return;
     }
     
     // If custom expiration date is selected, check if it's provided
     if (formValues.exceptionDurationType === 'custom' && !formValues.customExpirationDate) {
+      console.log('Form incomplete: Custom expiration date missing');
       setEnableSubmit(false);
       return;
     }
     
+    console.log('Form is complete, enabling submit');
     setEnableSubmit(true);
   };
 
@@ -278,12 +266,14 @@ const StandardExceptionFormModal = ({
         expirationDate = moment(date);
       }
       
-      // Combine server-specific justifications and mitigations
-      const serverDetails = values.serverNames.map((serverName, index) => ({
-        serverName,
-        justification: values.serverJustifications?.[index] || '',
-        mitigation: values.serverMitigations?.[index] || ''
-      })).filter(server => server.serverName?.trim());
+      // Get valid server entries
+      const serverDetails = values.serverEntries
+        .filter(entry => entry?.serverName?.trim())
+        .map(entry => ({
+          serverName: entry.serverName,
+          justification: entry.justification || '',
+          mitigation: entry.mitigation || ''
+        }));
 
       // Format the combined justification and mitigation
       const combinedJustification = serverDetails.map(server => 
@@ -295,21 +285,16 @@ const StandardExceptionFormModal = ({
       ).join('\n\n');
 
       // For standard exceptions, we'll use the first server as the primary server
-      // and include the rest in the justification/mitigation
       const primaryServer = serverDetails[0]?.serverName || '';
       
       const formData = {
         ...values,
-        serverName: primaryServer, // Use first server as primary
+        serverName: primaryServer,
         justification: combinedJustification,
         mitigation: combinedMitigation,
         expirationDate: expirationDate,
-        requestType: 'standard',
-        // Remove the individual arrays as they're now combined
-        serverNames: undefined,
-        serverJustifications: undefined,
-        serverMitigations: undefined,
-        // Add additional info if provided
+        formType: 'Standard',
+        serverEntries: undefined, // Remove the server entries array
         additionalInfo: values.additionalInfo ? 
           `Additional Information:\n${values.additionalInfo}\n\n${combinedJustification}` : 
           combinedJustification
@@ -374,14 +359,15 @@ const StandardExceptionFormModal = ({
       destroyOnClose
     >
       <Spin spinning={loading || approverLoading}>
-
-        
         <Form
           form={form}
           layout="vertical"
           onFinish={handleSubmit}
           requiredMark="optional"
           onValuesChange={handleFormValuesChange}
+          initialValues={{
+            serverEntries: [{}]
+          }}
         >
           {/* Requester Information */}
           <Collapse defaultActiveKey={['1']} style={{ marginBottom: 16 }}>
@@ -530,12 +516,12 @@ const StandardExceptionFormModal = ({
               </Form.Item>
 
               <Form.List
-                name="serverNames"
-                initialValue={['']}
+                name="serverEntries"
+                initialValue={[{}]}
               >
                 {(fields, { add, remove }) => (
                   <>
-                    <Typography.Text strong>Server Names/IPs</Typography.Text>
+                    <Typography.Text strong>Server Entries</Typography.Text>
 
                     {fields.map((field, index) => (
                       <ServerEntryFields
@@ -549,10 +535,10 @@ const StandardExceptionFormModal = ({
                       <Button
                         type="dashed"
                         onClick={() => add()}
+                        block
                         icon={<PlusOutlined />}
-                        style={{ width: '100%' }}
                       >
-                        Add Server Name/IP
+                        Add Server
                       </Button>
                     </Form.Item>
                   </>

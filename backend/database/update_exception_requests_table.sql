@@ -60,20 +60,71 @@ CREATE TABLE ExceptionRequestServers (
     FOREIGN KEY (RequestID) REFERENCES VulnerabilityExceptionRequests(ID) ON DELETE CASCADE
 );
 
--- Add a new column to track if the request has multiple servers
-ALTER TABLE VulnerabilityExceptionRequests
-ADD HasMultipleServers BIT DEFAULT 0;
+-- Check if HasMultipleServers column exists before adding it
+IF NOT EXISTS (SELECT * FROM sys.columns 
+               WHERE object_id = OBJECT_ID('VulnerabilityExceptionRequests')
+               AND name = 'HasMultipleServers')
+BEGIN
+    -- Add HasMultipleServers column with default value of 0
+    ALTER TABLE VulnerabilityExceptionRequests
+    ADD HasMultipleServers BIT NOT NULL DEFAULT 0;
+END
+GO
 
--- Create an index on the RequestID column for better performance
-CREATE INDEX IX_ExceptionRequestServers_RequestID ON ExceptionRequestServers(RequestID);
+-- Update the view to handle both single and multiple server cases
+IF EXISTS (SELECT * FROM sys.views WHERE name = 'vw_ExceptionRequestServers')
+    DROP VIEW vw_ExceptionRequestServers;
+GO
 
--- Update the trigger to handle multiple servers
-ALTER TRIGGER trg_GenerateRequestID
+CREATE VIEW vw_ExceptionRequestServers AS
+SELECT 
+    r.RequestID,
+    r.ID as RequestID_Internal,
+    s.ServerName,
+    s.Justification,
+    s.Mitigation,
+    r.ExceptionType,
+    r.Status,
+    r.ApprovalPhase,
+    r.CreatedAt,
+    r.UpdatedAt
+FROM VulnerabilityExceptionRequests r
+LEFT JOIN ExceptionRequestServers s ON r.ID = s.RequestID
+WHERE r.HasMultipleServers = 1
+UNION ALL
+SELECT 
+    r.RequestID,
+    r.ID as RequestID_Internal,
+    r.ServerName,
+    r.Justification,
+    r.Mitigation,
+    r.ExceptionType,
+    r.Status,
+    r.ApprovalPhase,
+    r.CreatedAt,
+    r.UpdatedAt
+FROM VulnerabilityExceptionRequests r
+WHERE r.HasMultipleServers = 0;
+GO
+
+-- Update the trigger to handle the HasMultipleServers column
+IF EXISTS (SELECT * FROM sys.triggers WHERE name = 'trg_GenerateRequestID')
+    DROP TRIGGER trg_GenerateRequestID;
+GO
+
+CREATE TRIGGER trg_GenerateRequestID
 ON VulnerabilityExceptionRequests
 INSTEAD OF INSERT
 AS
 BEGIN
     SET NOCOUNT ON;
+    
+    DECLARE @ServerDetails TABLE (
+        RequestID INT,
+        ServerName VARCHAR(255),
+        Justification TEXT,
+        Mitigation TEXT
+    );
     
     -- First insert into VulnerabilityExceptionRequests
     INSERT INTO VulnerabilityExceptionRequests (
@@ -120,37 +171,8 @@ BEGIN
 END
 GO
 
--- Create a view to easily get all server details for a request
-CREATE VIEW vw_ExceptionRequestServers AS
-SELECT 
-    r.RequestID,
-    r.ID as RequestID_Internal,
-    s.ServerName,
-    s.Justification,
-    s.Mitigation,
-    r.ExceptionType,
-    r.Status,
-    r.ApprovalPhase,
-    r.CreatedAt,
-    r.UpdatedAt
-FROM VulnerabilityExceptionRequests r
-LEFT JOIN ExceptionRequestServers s ON r.ID = s.RequestID
-WHERE r.HasMultipleServers = 1
-UNION ALL
-SELECT 
-    r.RequestID,
-    r.ID as RequestID_Internal,
-    r.ServerName,
-    r.Justification,
-    r.Mitigation,
-    r.ExceptionType,
-    r.Status,
-    r.ApprovalPhase,
-    r.CreatedAt,
-    r.UpdatedAt
-FROM VulnerabilityExceptionRequests r
-WHERE r.HasMultipleServers = 0;
-GO
+-- Create an index on the RequestID column for better performance
+CREATE INDEX IX_ExceptionRequestServers_RequestID ON ExceptionRequestServers(RequestID);
 
 -- Make sure RequestID is NOT NULL
 IF EXISTS (SELECT * FROM sys.columns 

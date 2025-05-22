@@ -1684,7 +1684,8 @@ def create_exception_request():
             'requesterEmail', 'departmentHeadUsername', 'departmentHeadFirstName',
             'departmentHeadLastName', 'departmentHeadJobDescription', 'departmentHeadEmail',
             'dataClassification', 'exceptionDurationType', 'usersAffected',
-            'dataAtRisk', 'justification', 'mitigation', 'termsAccepted'
+            'dataAtRisk', 'justification', 'mitigation', 'termsAccepted',
+            'formType'  # Add formType as a required field
         ]
         
         missing_fields = [field for field in required_fields if not data.get(field)]
@@ -1723,7 +1724,7 @@ def create_exception_request():
         vulnerabilities_json = json.dumps(data.get('vulnerabilities', []))
         
         # Get exception type from the request data
-        exception_type = data.get('requestType', 'Standard')
+        exception_type = data.get('formType', 'Standard')  # Changed from requestType to formType
         
         # Check if this is a multi-server request
         server_details = data.get('serverDetails', [])
@@ -1815,28 +1816,11 @@ def create_exception_request():
                     )
                     execute_query(server_insert_query, server_params)
             
-            # Prepare request data for email
-            request_data = {
-                'id': request_id,
-                'requestID': request_number,
-                'serverName': primary_server,
-                'hasMultipleServers': has_multiple_servers,
-                'serverCount': len(server_details) if server_details else 1,
-                'requesterFirstName': data.get('requesterFirstName'),
-                'requesterLastName': data.get('requesterLastName'),
-                'requesterEmail': data.get('requesterEmail'),
-                'requesterDepartment': requester_department,
-                'requesterJobDescription': data.get('requesterJobDescription'),
-                'dataClassification': data.get('dataClassification'),
-                'exceptionDurationType': duration_type,
-                'expirationDate': expiration_date,
-                'usersAffected': data.get('usersAffected'),
-                'dataAtRisk': data.get('dataAtRisk')
-            }
-            
             # Send confirmation email to the requester
             requester_email = data.get('requesterEmail')
-            send_exception_request_confirmation(requester_email, request_data)
+            if requester_email:
+                from email_utils import send_confirmation_email
+                send_confirmation_email(requester_email, primary_server)
             
             return jsonify({
                 'success': True,

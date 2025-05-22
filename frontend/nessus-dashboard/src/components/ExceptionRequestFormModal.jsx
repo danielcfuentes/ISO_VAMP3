@@ -265,7 +265,8 @@ const ExceptionRequestFormModal = ({
       const formData = {
         ...values,
         vulnerabilities: selectedVulnerabilities,
-        expirationDate: expirationDate
+        expirationDate: expirationDate,
+        formType: 'Vulnerability'
       };
       
       if (onSubmit) {

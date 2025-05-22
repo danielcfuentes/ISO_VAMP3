@@ -603,7 +603,8 @@ const InternalScanVulDetailsModal = ({
               justification: combinedJustification,
               mitigation: combinedMitigation,
               termsAccepted: values.termsAccepted,
-              expirationDate: values.expirationDate.format('YYYY-MM-DD')
+              expirationDate: values.expirationDate.format('YYYY-MM-DD'),
+              formType: 'vulnerability'
             };
             
             // Log the data being sent
