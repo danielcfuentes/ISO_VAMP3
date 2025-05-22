@@ -93,7 +93,7 @@ function App() {
     return (
       <MainLayout 
         isAdmin={isAdmin} 
-        isDepartmentHead={userRoles?.includes('department_head')} 
+        isDepartmentHead={userRoles?.isDepartmentHead} 
         onLogout={handleLogout}
       >
         {children}
